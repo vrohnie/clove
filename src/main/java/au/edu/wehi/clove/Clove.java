@@ -27,7 +27,7 @@ import htsjdk.samtools.util.SamLocusIterator;
 
 
 class EventIterator implements Iterator<Event> {
-	
+
 	private Iterator<GenomicNode> myNodeIterator;
 	private GenomicNode currentNode;
 	private int nextEventIndex;
@@ -40,7 +40,7 @@ class EventIterator implements Iterator<Event> {
 		nextEventIndex = 0;
 		skipEvents = skip;
 	}
-	
+
 	@Override
 	public boolean hasNext() {
 		System.err.println("Method in EventIterator should not be used!");
@@ -57,8 +57,8 @@ class EventIterator implements Iterator<Event> {
 			nextEventIndex ++;
 			if(skipEvents.contains(currentEvent))
 				return this.next();
-			else 
-				return currentEvent; 
+			else
+				return currentEvent;
 		}
 		nextEventIndex = 0;
 		currentNode = (myNodeIterator.hasNext()? myNodeIterator.next() : null);
@@ -67,13 +67,13 @@ class EventIterator implements Iterator<Event> {
 				currentNode = myNodeIterator.next();
 			else
 				currentNode = null;
-		}	
+		}
 		if(currentNode != null)
 			return this.next();
-		else 
+		else
 			return null;
 	}
-	
+
 	public GenomicCoordinate getInsertionCoordinate() {
 		if(currentEvent.getNode(true) == currentNode){
 			return currentEvent.getC1();
@@ -86,7 +86,7 @@ class EventIterator implements Iterator<Event> {
 	public void remove() {
 		System.err.println("Method in EventIterator should not be used!");
 	}
-	
+
 }
 
 public class Clove {
@@ -101,7 +101,7 @@ public class Clove {
 	private static boolean isInteresingSoftclip(SAMRecord s, int start, int end, String orientation){
 		if(orientation.equals("+") && s.getAlignmentEnd() <= end + 2 && softclipLength5prime(s) > 4){
 			return true;
-		} 
+		}
 		if(orientation.equals("-") && s.getAlignmentStart() >= start -2 && softclipLength3prime(s) > 4) {
 			return true;
 		}
@@ -116,13 +116,13 @@ public class Clove {
 	}
 	private static double fetchStuff(
 			String chr, int start, int end, String orientation,  SAMFileReader bamFile) {
-		
+
 		SAMRecordIterator iter = bamFile.queryOverlapping(chr, start, end);
-		
+
 		int properAlignment = 0,  softclipped = 0;
-		
+
 		int breakpointPosition = (start + end)/2;
-		
+
 		for(SAMRecord s; iter.hasNext();){
 			s = iter.next();
 			if(isInteresingSoftclip(s, start, end, orientation)){
@@ -131,10 +131,10 @@ public class Clove {
 				properAlignment++;
 			}
 		}
-		
+
 		return (double)softclipped/(softclipped+properAlignment);
 	}
-	
+
 	private static void addEventToNodeList(Event e, Hashtable<String, TreeSet<GenomicNode>> genomicNodes, boolean useFirstCoordinate){
 		GenomicCoordinate coordinate = (useFirstCoordinate? e.getC1() : e.getC2());
 		TreeSet<GenomicNode> nodeSet;
@@ -149,7 +149,7 @@ public class Clove {
 		nodeSet.add(newNode);
 
 	}
-	
+
 	private static String generateNodeLabel(GenomicNode n){
 		return n.getStart().getChr()+"_"+n.getStart().getPos()+"_"+n.getEnd().getPos();
 	}
@@ -173,37 +173,37 @@ public class Clove {
 						eventsWritten.add(e);
 					String l1 = generateNodeLabel(e.getNode(true)), l2 = generateNodeLabel(e.getNode(false));
 					switch(e.getType()){
-					case DEL: output.write(l1+"->"+l2+"[label=\"DEL\"];\n"); break;
-					case TAN: output.write(l1+"->"+l2+"[label=\"TAN\" arrowtail=normal arrowhead=none dir=both];\n"); break;
-					case COMPLEX_INVERSION: 
-						Event ee = ((ComplexEvent)e).getEventsInvolvedInComplexEvent()[0];
-						l1 = generateNodeLabel(ee.getNode(true));
-						l2 = generateNodeLabel(ee.getNode(false));
-						//if (l1.equals("ecoli_28204143_28204160")){
-						//if (l1.equals("ecoli_24118329_24118583")){
+						case DEL: output.write(l1+"->"+l2+"[label=\"DEL\"];\n"); break;
+						case TAN: output.write(l1+"->"+l2+"[label=\"TAN\" arrowtail=normal arrowhead=none dir=both];\n"); break;
+						case COMPLEX_INVERSION:
+							Event ee = ((ComplexEvent)e).getEventsInvolvedInComplexEvent()[0];
+							l1 = generateNodeLabel(ee.getNode(true));
+							l2 = generateNodeLabel(ee.getNode(false));
+							//if (l1.equals("ecoli_28204143_28204160")){
+							//if (l1.equals("ecoli_24118329_24118583")){
 							System.out.println("COMPLEX_INV:");
 							System.out.println("l1:\t"+generateNodeLabel(ee.getNode(true))+"\t");
 							System.out.println("l2:\t"+generateNodeLabel(ee.getNode(false))+"\t");
-						//}
-						output.write(l1+"->"+l2+"[label=\"COMPLEX_INV\"  dir=both];\n"); break;//should we differentiate COMPLEX_INV and INV?
-					case COMPLEX_TRANSLOCATION: 
-					case COMPLEX_DUPLICATION:
-						GenomicNode insNode = e.getNode(true);
-						String label = (e.getType() == EVENT_TYPE.COMPLEX_DUPLICATION? "DUP" : "TRANS");
-						l1 = generateNodeLabel(insNode);
-						Event[] allEvents = ((ComplexEvent)e).getEventsInvolvedInComplexEvent();
-						for(int i=0;i<allEvents.length;i++){
-							if(allEvents[i].getNode(true) == insNode){
-								l2 = generateNodeLabel(allEvents[i].getNode(false));
-								output.write(l1+"->"+l2+"[label=\""+label+"\" arrowtail=odiamond arrowhead=normal dir=both];\n");
-							} else if(allEvents[i].getNode(false) == insNode){
-								l2 = generateNodeLabel(allEvents[i].getNode(true));
-								output.write(l1+"->"+l2+"[label=\""+label+"\" arrowtail=odiamond arrowhead=normal dir=both];\n");
+							//}
+							output.write(l1+"->"+l2+"[label=\"COMPLEX_INV\"  dir=both];\n"); break;//should we differentiate COMPLEX_INV and INV?
+						case COMPLEX_TRANSLOCATION:
+						case COMPLEX_DUPLICATION:
+							GenomicNode insNode = e.getNode(true);
+							String label = (e.getType() == EVENT_TYPE.COMPLEX_DUPLICATION? "DUP" : "TRANS");
+							l1 = generateNodeLabel(insNode);
+							Event[] allEvents = ((ComplexEvent)e).getEventsInvolvedInComplexEvent();
+							for(int i=0;i<allEvents.length;i++){
+								if(allEvents[i].getNode(true) == insNode){
+									l2 = generateNodeLabel(allEvents[i].getNode(false));
+									output.write(l1+"->"+l2+"[label=\""+label+"\" arrowtail=odiamond arrowhead=normal dir=both];\n");
+								} else if(allEvents[i].getNode(false) == insNode){
+									l2 = generateNodeLabel(allEvents[i].getNode(true));
+									output.write(l1+"->"+l2+"[label=\""+label+"\" arrowtail=odiamond arrowhead=normal dir=both];\n");
+								}
+
 							}
-							
-						}
-						break;
-					default: output.write(l1+"->"+l2+"[label=\""+e.getType()+"\"];\n");
+							break;
+						default: output.write(l1+"->"+l2+"[label=\""+e.getType()+"\"];\n");
 					}
 				}
 			}
@@ -212,34 +212,34 @@ public class Clove {
 		output.flush();
 		output.close();
 	}
-	
-	
+
+
 	private static void compareToGoldStandard(String goldFileName, Hashtable<String, TreeSet<GenomicNode>> genomicNodes, int margin, boolean compareStrictly) throws IOException {
 		boolean checkAgain = true;
 		if(oldFns.size() == 0){
 			checkAgain = false;
 		}
-		
+
 		BufferedReader gold = new BufferedReader(new FileReader(goldFileName));
 		String goldLine = gold.readLine();
 		String currentChromosome = goldLine.replace(":","\t").split( "\t")[1];
 		System.out.println("Working on first chromosome: "+currentChromosome);
 		//Iterator<GenomicNode> iter = genomicNodes.get("gi|260447279|gb|CP001637.1|").iterator();
-		
+
 		HashSet<Event> skip = new HashSet<Event>();
 		HashSet<Event> tryAgain = new HashSet<Event>();
 		HashSet<String> recalledOnce = new HashSet<String>();
 		Iterator<GenomicNode> iter = genomicNodes.get(currentChromosome).iterator();
 		EventIterator events = new EventIterator(iter, skip);
 		Event e = events.next();
-		
+
 		Hashtable<EVENT_TYPE, int[]> statsByType = new Hashtable<EVENT_TYPE, int[]>();
 		for(EVENT_TYPE t: EVENT_TYPE.values()){
 			//the convention used below is: TP index 0, FP 1, and FN 2
 			statsByType.put(t, new int[4]);
 		}
-			//static conversion table
-			Hashtable<String, EVENT_TYPE> typeConversion = new Hashtable<String, EVENT_TYPE>();
+		//static conversion table
+		Hashtable<String, EVENT_TYPE> typeConversion = new Hashtable<String, EVENT_TYPE>();
 		{
 			typeConversion.put("INVERSION", EVENT_TYPE.COMPLEX_INVERSION);
 			typeConversion.put("DELETION", EVENT_TYPE.DEL);
@@ -256,8 +256,8 @@ public class Clove {
 			typeConversion.put("INTERCHROMOSOMAL_DUPLICATION", EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_DUPLICATION);
 			typeConversion.put("INTERCHROMOSOMAL_INVERTED_DUPLICATION", EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_INVERTED_DUPLICATION);
 		}
-		
-		
+
+
 		while(goldLine != null ){
 			StringTokenizer st = new StringTokenizer(goldLine, ":-\t ");
 			String type = st.nextToken();
@@ -273,7 +273,7 @@ public class Clove {
 					}
 					e = events.next();
 				}
-				
+
 				currentChromosome = chr;
 				System.out.println("Working on chromosome: "+currentChromosome);
 				if(!genomicNodes.containsKey(chr)){
@@ -296,10 +296,10 @@ public class Clove {
 				statsByType.get(typeConversion.get(type))[2]++;
 				goldLine = gold.readLine();
 				continue;
-			} 
-			
+			}
+
 			GenomicCoordinate compare;
-			if(e.getType() == EVENT_TYPE.COMPLEX_INVERTED_TRANSLOCATION || e.getType() == EVENT_TYPE.COMPLEX_INVERTED_DUPLICATION 
+			if(e.getType() == EVENT_TYPE.COMPLEX_INVERTED_TRANSLOCATION || e.getType() == EVENT_TYPE.COMPLEX_INVERTED_DUPLICATION
 					|| e.getType() == EVENT_TYPE.COMPLEX_DUPLICATION || e.getType() == EVENT_TYPE.COMPLEX_TRANSLOCATION
 					|| e.getType() == EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_INVERTED_TRANSLOCATION || e.getType() == EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_INVERTED_DUPLICATION
 					|| e.getType() == EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_DUPLICATION || e.getType() == EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_TRANSLOCATION) {
@@ -360,8 +360,8 @@ public class Clove {
 						statsByType.get(e.getType())[0]++;
 					}
 					//goldLine = gold.readLine();
-					
-					
+
+
 				} else {
 					//System.out.println("Half TP: Type mismatch: "+e+" "+goldLine);
 					if(recalledOnce.contains(goldLine)){
@@ -369,14 +369,14 @@ public class Clove {
 						System.out.println("Redundant HTP!");
 					} else {
 						statsByType.get(typeConversion.get(type))[3]++;
-					}	
-					
+					}
+
 				}
 				recalledOnce.add(goldLine);
 				skip.add(e);
 				e = events.next();
 			}
-			
+
 		}
 		while(goldLine!=null){
 			if(! goldLine.contains("SNP") && ! goldLine.contains("TRANSLOCATION_DELETION") && (!recalledOnce.contains(goldLine) || compareStrictly)){
@@ -387,7 +387,7 @@ public class Clove {
 			goldLine = gold.readLine();
 		}
 		e = events.next();
-		
+
 		int tps=0, fps=0, fns=0, htps=0;
 		System.out.println("Stats:\tTP\tHalf-TP\tFP\tFN\tSen\tSpe");
 		for(EVENT_TYPE t: EVENT_TYPE.values()){
@@ -401,7 +401,7 @@ public class Clove {
 		System.out.println("Accuracy:\t"+((double)tps/(tps+fps+fns))+"\t"+((double)(tps+htps)/(tps+fps+fns+htps)));
 		gold.close();
 	}
-	
+
 	private static void reportEventComposition(Hashtable<String, TreeSet<GenomicNode>> genomicNodes) {
 		Hashtable<EVENT_TYPE, Integer> eventCounts = new Hashtable<EVENT_TYPE, Integer>();
 		int selfRef = 0;
@@ -428,129 +428,129 @@ public class Clove {
 		}
 		System.out.println("Self refs: "+selfRef);
 	}
-	
-	
-	
+
+
+
 	//private static double getReadDepth(String str, String chr, int start, int end){
 	private static double getReadDepth(SAMFileReader samReader, String chr, int start, int end){
-		
+
 		if(start >= end){
 			return -1;
 		}
-		
+
 		//SAMFileReader  samReader=new  SAMFileReader(new  File(str));
-        String chromId=chr;
-        int chromStart=start;
-        int chromEnd=end;
-        int pos=0;
-        int depth=0;
-        int total=0;
-        int count=0;
-        Interval  interval=new  Interval(chromId,chromStart,chromEnd);
-        IntervalList  iL=new  IntervalList(samReader.getFileHeader());
-        iL.add(interval);
+		String chromId=chr;
+		int chromStart=start;
+		int chromEnd=end;
+		int pos=0;
+		int depth=0;
+		int total=0;
+		int count=0;
+		Interval  interval=new  Interval(chromId,chromStart,chromEnd);
+		IntervalList  iL=new  IntervalList(samReader.getFileHeader());
+		iL.add(interval);
 
-        SamLocusIterator  sli=new  SamLocusIterator(samReader,iL,true);
+		SamLocusIterator  sli=new  SamLocusIterator(samReader,iL,true);
 
-        for(Iterator<SamLocusIterator.LocusInfo> iter=sli.iterator(); iter.hasNext();){
-            SamLocusIterator.LocusInfo  locusInfo=iter.next();
-            //pos = locusInfo.getPosition();
-            depth = locusInfo.getRecordAndPositions().size();
-            total+=depth;
-            count++;
-            //System.out.println("POS="+pos+" depth:"+depth);
-            }
-        //System.out.println("total: "+total+"\tcount: "+count);
-        sli.close();
-        //samReader.close();
-        
-        return (double)total/count;
-    }
-	
-	public static void createVCFHeader(PrintWriter output) throws IOException{
-		  //file format
-        output.write("##fileformat=VCFv4.2\n");
-        
-        //fileDate
-        DateFormat dateFormat = new SimpleDateFormat ("yyyyMMdd");
-        Date date = new Date();
-        output.write("##fileDate="+dateFormat.format(date)+"\n");
-        
-        //INFO
-        output.write("##INFO=<ID=CIEND,Number=2,Type=Integer,Description=\"PE confidence interval around END\">\n");
-        output.write("##INFO=<ID=CIPOS,Number=2,Type=Integer,Description=\"PE confidence interval around POS\">\n");
-        output.write("##INFO=<ID=CHR2,Number=1,Type=String,Description=\"Chromosome for END coordinate in case of a translocation\">\n");
-        output.write("##INFO=<ID=START>,Number=1,Type=Integer,Description=\"Start position of the interval (for certain types only)\">\n");
-        output.write("##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the structural variant\">\n");
-        output.write("##INFO=<ID=PE,Number=1,Type=Integer,Description=\"Paired-end support of the structural variant\">\n");
-        output.write("##INFO=<ID=MAPQ,Number=1,Type=Integer,Description=\"Median mapping quality of paired-ends\">\n");
-        output.write("##INFO=<ID=SR,Number=1,Type=Integer,Description=\"Split-read support\">\n");
-        output.write("##INFO=<ID=SRQ,Number=1,Type=Float,Description=\"Split-read consensus alignment quality\">\n");
-        output.write("##INFO=<ID=CONSENSUS,Number=1,Type=String,Description=\"Split-read consensus sequence\">\n");
-        output.write("##INFO=<ID=CT,Number=1,Type=String,Description=\"Paired-end signature induced connection type\">\n");
-        output.write("##INFO=<ID=IMPRECISE,Number=0,Type=Flag,Description=\"Imprecise structural variation\">\n");
-        output.write("##INFO=<ID=PRECISE,Number=0,Type=Flag,Description=\"Precise structural variation\">\n");
-        output.write("##INFO=<ID=SVTYPE,Number=1,Type=String,Description=\"Type of structural variant\">\n");
-        output.write("##INFO=<ID=SVMETHOD,Number=1,Type=String,Description=\"Type of approach used to detect SV\">\n");
-        output.write("##INFO=<ID=ADP,Number=1,Type=Integer,Description=\"Average Read Depth\">\n");
-        output.write("##INFO=<ID=SUPPORT,Number=2,Type=Integer,Description=\"SV support by (i) number of aligners, and (ii) number of calls between all aligners\">\n");
-        
-        //FILTER
-        output.write("##FILTER=<ID=LowQual,Description=\"PE support below 3 or mapping quality below 20.\">\n");
-        
-        //FORMAT
-        output.write("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n");
-        output.write("##FORMAT=<ID=GL,Number=G,Type=Float,Description=\"Log10-scaled genotype likelihoods for RR,RA,AA genotypes\">\n");
-        output.write("##FORMAT=<ID=GQ,Number=1,Type=Integer,Description=\"Genotype Quality\">\n");
-        output.write("##FORMAT=<ID=FT,Number=1,Type=String,Description=\"Per-sample genotype filter\">\n");
-        output.write("##FORMAT=<ID=RC,Number=1,Type=Integer,Description=\"Raw high-quality read counts for the SV\">\n");
-        output.write("##FORMAT=<ID=DR,Number=1,Type=Integer,Description=\"# high-quality reference pairs\">\n");
-        output.write("##FORMAT=<ID=DV,Number=1,Type=Integer,Description=\"# high-quality variant pairs\">\n");
-        output.write("##FORMAT=<ID=RR,Number=1,Type=Integer,Description=\"# high-quality reference junction reads\">\n");
-        output.write("##FORMAT=<ID=RV,Number=1,Type=Integer,Description=\"# high-quality variant junction reads\">\n");
+		for(Iterator<SamLocusIterator.LocusInfo> iter=sli.iterator(); iter.hasNext();){
+			SamLocusIterator.LocusInfo  locusInfo=iter.next();
+			//pos = locusInfo.getPosition();
+			depth = locusInfo.getRecordAndPositions().size();
+			total+=depth;
+			count++;
+			//System.out.println("POS="+pos+" depth:"+depth);
+		}
+		//System.out.println("total: "+total+"\tcount: "+count);
+		sli.close();
+		//samReader.close();
 
-        //ALT
-        output.write("##ALT=<ID=DEL,Description=\"Deletion\">\n");
-        output.write("##ALT=<ID=TAN,Description=\"Tandem Duplication\">\n");
-        output.write("##ALT=<ID=INV,Description=\"Inversion\">\n");
-        output.write("##ALT=<ID=INS,Description=\"Insertion\">\n");
-        output.write("##ALT=<ID=DUP,Description=\"Complex Duplication\">\n");
-        output.write("##ALT=<ID=TRA,Description=\"Complex Translocation\">\n");
-        output.write("##ALT=<ID=CIV,Description=\"Complex Inversion\">\n");
-        output.write("##ALT=<ID=CVT,Description=\"Complex Inverted Translocation\">\n");
-        output.write("##ALT=<ID=CVD,Description=\"Complex Inverted Duplication\">\n");
-        output.write("##ALT=<ID=CIT,Description=\"Complex Interchromosomal Translocation\">\n");
-        output.write("##ALT=<ID=CID,Description=\"Complex Interchromosomal Duplication\">\n");
-        output.write("##ALT=<ID=IVT,Description=\"Complex Inverted Interchromosomal Translocation\">\n");
-        output.write("##ALT=<ID=IVD,Description=\"Complex Inverted Interchromosomal Duplication\">\n");
-
-        //Header Line
-        output.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\n");
+		return (double)total/count;
 	}
-	
+
+	public static void createVCFHeader(PrintWriter output) throws IOException{
+		//file format
+		output.write("##fileformat=VCFv4.2\n");
+
+		//fileDate
+		DateFormat dateFormat = new SimpleDateFormat ("yyyyMMdd");
+		Date date = new Date();
+		output.write("##fileDate="+dateFormat.format(date)+"\n");
+
+		//INFO
+		output.write("##INFO=<ID=CIEND,Number=2,Type=Integer,Description=\"PE confidence interval around END\">\n");
+		output.write("##INFO=<ID=CIPOS,Number=2,Type=Integer,Description=\"PE confidence interval around POS\">\n");
+		output.write("##INFO=<ID=CHR2,Number=1,Type=String,Description=\"Chromosome for END coordinate in case of a translocation\">\n");
+		output.write("##INFO=<ID=START>,Number=1,Type=Integer,Description=\"Start position of the interval (for certain types only)\">\n");
+		output.write("##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the structural variant\">\n");
+		output.write("##INFO=<ID=PE,Number=1,Type=Integer,Description=\"Paired-end support of the structural variant\">\n");
+		output.write("##INFO=<ID=MAPQ,Number=1,Type=Integer,Description=\"Median mapping quality of paired-ends\">\n");
+		output.write("##INFO=<ID=SR,Number=1,Type=Integer,Description=\"Split-read support\">\n");
+		output.write("##INFO=<ID=SRQ,Number=1,Type=Float,Description=\"Split-read consensus alignment quality\">\n");
+		output.write("##INFO=<ID=CONSENSUS,Number=1,Type=String,Description=\"Split-read consensus sequence\">\n");
+		output.write("##INFO=<ID=CT,Number=1,Type=String,Description=\"Paired-end signature induced connection type\">\n");
+		output.write("##INFO=<ID=IMPRECISE,Number=0,Type=Flag,Description=\"Imprecise structural variation\">\n");
+		output.write("##INFO=<ID=PRECISE,Number=0,Type=Flag,Description=\"Precise structural variation\">\n");
+		output.write("##INFO=<ID=SVTYPE,Number=1,Type=String,Description=\"Type of structural variant\">\n");
+		output.write("##INFO=<ID=SVMETHOD,Number=1,Type=String,Description=\"Type of approach used to detect SV\">\n");
+		output.write("##INFO=<ID=ADP,Number=1,Type=Integer,Description=\"Average Read Depth\">\n");
+		output.write("##INFO=<ID=SUPPORT,Number=2,Type=Integer,Description=\"SV support by (i) number of aligners, and (ii) number of calls between all aligners\">\n");
+
+		//FILTER
+		output.write("##FILTER=<ID=LowQual,Description=\"PE support below 3 or mapping quality below 20.\">\n");
+
+		//FORMAT
+		output.write("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n");
+		output.write("##FORMAT=<ID=GL,Number=G,Type=Float,Description=\"Log10-scaled genotype likelihoods for RR,RA,AA genotypes\">\n");
+		output.write("##FORMAT=<ID=GQ,Number=1,Type=Integer,Description=\"Genotype Quality\">\n");
+		output.write("##FORMAT=<ID=FT,Number=1,Type=String,Description=\"Per-sample genotype filter\">\n");
+		output.write("##FORMAT=<ID=RC,Number=1,Type=Integer,Description=\"Raw high-quality read counts for the SV\">\n");
+		output.write("##FORMAT=<ID=DR,Number=1,Type=Integer,Description=\"# high-quality reference pairs\">\n");
+		output.write("##FORMAT=<ID=DV,Number=1,Type=Integer,Description=\"# high-quality variant pairs\">\n");
+		output.write("##FORMAT=<ID=RR,Number=1,Type=Integer,Description=\"# high-quality reference junction reads\">\n");
+		output.write("##FORMAT=<ID=RV,Number=1,Type=Integer,Description=\"# high-quality variant junction reads\">\n");
+
+		//ALT
+		output.write("##ALT=<ID=DEL,Description=\"Deletion\">\n");
+		output.write("##ALT=<ID=TAN,Description=\"Tandem Duplication\">\n");
+		output.write("##ALT=<ID=INV,Description=\"Inversion\">\n");
+		output.write("##ALT=<ID=INS,Description=\"Insertion\">\n");
+		output.write("##ALT=<ID=DUP,Description=\"Complex Duplication\">\n");
+		output.write("##ALT=<ID=TRA,Description=\"Complex Translocation\">\n");
+		output.write("##ALT=<ID=CIV,Description=\"Complex Inversion\">\n");
+		output.write("##ALT=<ID=CVT,Description=\"Complex Inverted Translocation\">\n");
+		output.write("##ALT=<ID=CVD,Description=\"Complex Inverted Duplication\">\n");
+		output.write("##ALT=<ID=CIT,Description=\"Complex Interchromosomal Translocation\">\n");
+		output.write("##ALT=<ID=CID,Description=\"Complex Interchromosomal Duplication\">\n");
+		output.write("##ALT=<ID=IVT,Description=\"Complex Inverted Interchromosomal Translocation\">\n");
+		output.write("##ALT=<ID=IVD,Description=\"Complex Inverted Interchromosomal Duplication\">\n");
+
+		//Header Line
+		output.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\n");
+	}
+
 	enum SV_ALGORITHM {SOCRATES, DELLY, DELLY2, CREST, GUSTAF, BEDPE, METASV, GRIDSS, LUMPY};
-	
-	
+
+
 	static ArrayList<String> oldFns = new ArrayList<String>();
 	/**
 	 * @param args
-	 * @throws IOException 
+	 * @throws IOException
 	 */
 	public static void main(String[] args) throws IOException {
 		//Start Time
 		long startTime = System.nanoTime();
-	
+
 		if(args.length < 8){
 			System.err.println("Options (all mandatory -- input can be specified more than once):" +
 					"\n\t-i <list of breakpoints> <algorithm (Socrates/Delly/Delly2/Crest/Gustaf/BEDPE/GRIDSS)>" +
 					"\n\t-b <BAM file> \n\t-c <mean coverage> <coverage>" +
 					"\n\t-o <output filename> [default: CLOVE.vcf]" +
 					"\n\t-r Do not perform read depth check. This option will lead all deletions and tandem "+
-						"\n\t   duplications to fail, but runs a lot faster. Use to get an idea about complex "+
-						"\n\t   variants only.");
+					"\n\t   duplications to fail, but runs a lot faster. Use to get an idea about complex "+
+					"\n\t   variants only.");
 			System.exit(0);
 		}
-		
+
 		/*parse the options from the command line */
 		int argindex = 0;
 		ArrayList<Tuple<BufferedReader, SV_ALGORITHM>> inputs = new ArrayList<Tuple<BufferedReader,SV_ALGORITHM>>();
@@ -599,14 +599,14 @@ public class Clove {
 				checkRD = false;
 				argindex ++;
 			}
-			
+
 			else {
 				System.err.println("Unknown option: "+args[argindex]);
 				throw new IllegalArgumentException();
 			}
 		}
 
-		
+
 		/*
 		 * parse the entire input file and collect all events in list
 		 */
@@ -614,7 +614,7 @@ public class Clove {
 
 		String line;
 		int count = 0;
-		
+
 		for(Tuple<BufferedReader, SV_ALGORITHM> input_tuple : inputs){
 			System.out.println("Reading input...");
 			BufferedReader input = input_tuple.a;
@@ -624,44 +624,63 @@ public class Clove {
 				if(line.startsWith("#"))
 					continue;
 				Event e;
-				switch(algorithm){
-				case SOCRATES: 	e = Event.createNewEventFromSocratesOutputLatest(line, count++); 	break;
-				case DELLY: 	e = Event.createNewEventFromDellyOutputLatest(line);break;
-				case DELLY2:	e = Event.createNewEventFromDelly2Output(line);break;
-				case CREST:		e = Event.createNewEventFromCrestOutputLatest(line, count++); 		break;
-				case GUSTAF: 	e = Event.createNewEventFromGustafOutput(line);	  if(e.size()<50) continue; break;
-				case BEDPE: 	e = Event.createNewEventFromBEDPE(line); break;
-				case METASV:	e = Event.createNewEventFromMetaSVOutput(line); break;
-				case GRIDSS:	e = Event.createNewEventFromGRIDSSOutput(line); break;
-				case LUMPY:		e = Event.createNewEventFromLUMPYOutput(line); break;
-				default:		e = null;
+				switch(algorithm) {
+					case SOCRATES:
+						e = Event.createNewEventFromSocratesOutputLatest(line, count++);
+						break;
+					case DELLY:
+						e = Event.createNewEventFromDellyOutputLatest(line);
+						break;
+					case DELLY2:
+						e = Event.createNewEventFromDelly2Output(line);
+						break;
+					case CREST:
+						e = Event.createNewEventFromCrestOutputLatest(line, count++);
+						break;
+					case GUSTAF:
+						e = Event.createNewEventFromGustafOutput(line);
+						if (e.size() < 50) continue;
+						break;
+					case BEDPE:
+						e = Event.createNewEventFromBEDPE(line);
+						break;
+					case METASV:
+						e = Event.createNewEventFromMetaSVOutput(line);
+						break;
+					case GRIDSS:
+						e = Event.createNewEventFromGRIDSSOutput(line);
+						//if (e.getType() == EVENT_TYPE.BE1 || e.getType() == EVENT_TYPE.BE2) continue;
+						break;
+
+					case LUMPY:		e = Event.createNewEventFromLUMPYOutput(line); break;
+					default:		e = null;
 				}
 				allEvents.add(e);
 			}
 			input.close();
 		}
 		System.out.println("Total events: "+allEvents.size());
-		
+
 		/*VCF Header*/
 		//PrintWriter writer = new PrintWriter("/Users/schroeder/Downloads/VCF.txt", "UTF-8");
 		//PrintWriter writer = new PrintWriter("/home/adrianto/Downloads/VCF.txt", "UTF-8");
 		//PrintWriter writer = new PrintWriter("/home/users/allstaff/schroeder/tools/GenotypeBreakpoints/VCF.txt", "UTF-8");
-		
+
 		PrintWriter writer = new PrintWriter(outputVCF, "UTF-8");
 		createVCFHeader(writer);
-		
+
 		/*
-		 * Create nodes data structure that combines close events into the same 
+		 * Create nodes data structure that combines close events into the same
 		 * genomic node
 		 */
 		Hashtable<String, TreeSet<GenomicNode>> genomicNodes = new Hashtable<String, TreeSet<GenomicNode>>();
-		
+
 		//parse all events and create new nodes 
 		for (Event e: allEvents){
 			addEventToNodeList(e, genomicNodes, true);
 			addEventToNodeList(e, genomicNodes, false);
 		}
-		
+
 		//establish distance for "close" events according to algorithm
 		int maxDistanceForNodeMerge = 15;
 //		switch(algorithm){
@@ -673,7 +692,7 @@ public class Clove {
 //		}
 		//static parameter to classify single inversions as FP or TP
 		final boolean classifySimpleInversion = false;
-		
+
 		//iterate through node sets and merge nodes where necessary
 		//also checks each node for redundant members
 		//TODO: handle redundant members
@@ -695,7 +714,7 @@ public class Clove {
 //					for(Event e:currentNode.getEvents()){
 //						System.out.println(e);
 //					}
-					lastNode.mergeWithNode(currentNode);	
+					lastNode.mergeWithNode(currentNode);
 					if(!tableEntry.getValue().remove(currentNode))
 						System.out.println("NO CAN DO");
 					nodesMerged++;
@@ -708,30 +727,35 @@ public class Clove {
 			System.out.println("Nodes merged: "+nodesMerged);
 		}
 		System.out.println("Events merged: "+GenomicNode.global_event_merge_counter);
-		
+
 		//String goldStandard = args[1].substring(0, 22)+"_2.fa";
 		//String goldStandard = "/home/users/allstaff/schroeder/GenotypeBreakpoints/data/ecoli/SV_list_2.txt";
-		
+
 
 		//compareToGoldStandard(goldStandard, genomicNodes, 150, true);
 		if(goldStandard != null)
 			compareToGoldStandard(goldStandard, genomicNodes, 150, false);
-		
+
 		String tempInfo = null;
 		//iterate through node sets again, and genotype events
 		for(Entry<String, TreeSet<GenomicNode>> tableEntry: genomicNodes.entrySet()) {
 			System.out.println("Nodes on chr:"+tableEntry.getValue().size());
 			for(GenomicNode currentNode: tableEntry.getValue()){
+
 				//iterate through all event-event pairing in this node and assess for complex events
+
 				Event e1, e2;
 				HashSet<Event> removeEvents = new HashSet<Event>();
 				HashSet<ComplexEvent> newComplexEvents = new HashSet<ComplexEvent>();
 				ComplexEvent newComplexEvent = null;
+
 				for(int i=0; i<currentNode.getEvents().size(); i++){
 					e1 = currentNode.getEvents().get(i);
 					for(int j=0; j<currentNode.getEvents().size(); j++){
 						e2 = currentNode.getEvents().get(j);
-						if(e1 == e2 || removeEvents.contains(e2) || removeEvents.contains(e1) 
+
+						// skip removed events and events where both nodes are the same
+						if(e1 == e2 || removeEvents.contains(e2) || removeEvents.contains(e1)
 								|| e1.otherNode(currentNode) == currentNode || e2.otherNode(currentNode) == currentNode)
 							continue;
 						switch(e1.getType()){
@@ -768,7 +792,7 @@ public class Clove {
 									//tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+"; CHR2="+invend.getChr()+"; END="+Integer.toString(invend.getPos());
 									tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+";CHR2="+invend.getChr()+";END="+Integer.toString(invend.getPos())+";ADP="+readDepth;
 									newComplexEvent.setInfo(tempInfo);
-																									
+
 									//writer.write(newComplexEvent.getC1().getChr()+"\t"+invstart+"\t"+newComplexEvent.getId()+"\t"+newComplexEvent.getRef()+"\t"+newComplexEvent.getAlt()+"\t"+newComplexEvent.getQual()+"\t"+newComplexEvent.getFilter()+"\t"+newComplexEvent.getInfo()+"\n");
 									//currentNode?
 									//System.out.println(currentNode.getStart().toString());
@@ -779,17 +803,17 @@ public class Clove {
 									if(other1.compareTo(other2) > 0){
 										Event e3 = other1.existsDeletionEventTo(other2);
 										if(e3 != null){
-											 GenomicCoordinate invstart = (e2.getNode(true) == currentNode ? e2.getC2() : e2.getC1() ),
-											                	 invend   = (e1.getNode(true) == currentNode ? e1.getC2() : e1.getC1() ),
-																				 insert   = (e1.getNode(true) == currentNode ? e1.getC1() : e1.getC2() );
-											 newComplexEvent = new ComplexEvent(invstart, invend, EVENT_TYPE.COMPLEX_INVERTED_TRANSLOCATION, (new Event[] {e1, e2, e3}), currentNode, insert);
-											 //newComplexEvent.setId(e1.getId());
-											 newComplexEvent.setCoord(invstart);
-											 newComplexEvent.setId(e1.getId()+"+"+e2.getId());
-											 newComplexEvent.setRef(e1.getRef());
-											 newComplexEvent.setAlt("<CVT>");
-											 newComplexEvent.setFilter(e1.getFilter());
-											 newComplexEvent.setQual(e1.getQual());
+											GenomicCoordinate invstart = (e2.getNode(true) == currentNode ? e2.getC2() : e2.getC1() ),
+													invend   = (e1.getNode(true) == currentNode ? e1.getC2() : e1.getC1() ),
+													insert   = (e1.getNode(true) == currentNode ? e1.getC1() : e1.getC2() );
+											newComplexEvent = new ComplexEvent(invstart, invend, EVENT_TYPE.COMPLEX_INVERTED_TRANSLOCATION, (new Event[] {e1, e2, e3}), currentNode, insert);
+											//newComplexEvent.setId(e1.getId());
+											newComplexEvent.setCoord(invstart);
+											newComplexEvent.setId(e1.getId()+"+"+e2.getId());
+											newComplexEvent.setRef(e1.getRef());
+											newComplexEvent.setAlt("<CVT>");
+											newComplexEvent.setFilter(e1.getFilter());
+											newComplexEvent.setQual(e1.getQual());
 //											 tempInfo = e1.getInfo();
 //											 //System.out.println(tempInfo+"\n");
 //											 if (tempInfo.contains("SVTYPE")){
@@ -804,16 +828,16 @@ public class Clove {
 //												 tempInfo.replace(tmpOld, tmpNew);
 //												 newComplexEvent.setInfo(tempInfo);
 //											 }
-											 double readDepth = (checkRD? getReadDepth(samReader, invstart.getChr(), invstart.getPos(), invend.getPos()) : -1);
-											 //tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+"; CHR2="+invend.getChr()+"; END="+Integer.toString(invend.getPos());
-											 tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+";CHR2="+invend.getChr()+";END="+Integer.toString(invend.getPos())+";ADP="+readDepth;
-											 newComplexEvent.setInfo(tempInfo);
-											 //writer.write(newComplexEvent.getC1().getChr()+"\t"+invstart+"\t"+newComplexEvent.getId()+"\t"+newComplexEvent.getRef()+"\t"+newComplexEvent.getAlt()+"\t"+newComplexEvent.getQual()+"\t"+newComplexEvent.getFilter()+"\t"+newComplexEvent.getInfo()+"\n");
+											double readDepth = (checkRD? getReadDepth(samReader, invstart.getChr(), invstart.getPos(), invend.getPos()) : -1);
+											//tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+"; CHR2="+invend.getChr()+"; END="+Integer.toString(invend.getPos());
+											tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+";CHR2="+invend.getChr()+";END="+Integer.toString(invend.getPos())+";ADP="+readDepth;
+											newComplexEvent.setInfo(tempInfo);
+											//writer.write(newComplexEvent.getC1().getChr()+"\t"+invstart+"\t"+newComplexEvent.getId()+"\t"+newComplexEvent.getRef()+"\t"+newComplexEvent.getAlt()+"\t"+newComplexEvent.getQual()+"\t"+newComplexEvent.getFilter()+"\t"+newComplexEvent.getInfo()+"\n");
 										} else {
 											//System.out.println("INVDUP!"+e1+e2);
 											GenomicCoordinate invstart = (e2.getNode(true) == currentNode ? e2.getC2() : e2.getC1() ),
-															  invend   = (e1.getNode(true) == currentNode ? e1.getC2() : e1.getC1() ),
-															  insert   = (e1.getNode(true) == currentNode ? e1.getC1() : e1.getC2() );
+													invend   = (e1.getNode(true) == currentNode ? e1.getC2() : e1.getC1() ),
+													insert   = (e1.getNode(true) == currentNode ? e1.getC1() : e1.getC2() );
 											newComplexEvent = new ComplexEvent(invstart, invend, EVENT_TYPE.COMPLEX_INVERTED_DUPLICATION, (new Event[] {e1, e2}), currentNode, insert);
 											//newComplexEvent.setId(e1.getId());
 											newComplexEvent.setCoord(invstart);
@@ -1013,7 +1037,7 @@ public class Clove {
 												newComplexEvent.setCoord(insert);
 												//writer.write(newComplexEvent.getC1().getChr()+"\t"+newComplexEvent.getC1().getPos()+"\t"+newComplexEvent.getId()+"\t"+newComplexEvent.getRef()+"\t"+newComplexEvent.getAlt()+"\t"+newComplexEvent.getQual()+"\t"+newComplexEvent.getFilter()+"\t"+newComplexEvent.getInfo()+"\n");
 											}
-											
+
 										}
 									}
 								}
@@ -1027,11 +1051,11 @@ public class Clove {
 										break;
 									GenomicCoordinate eventStart, eventEnd, eventInsert;
 									if(currentNode.compareTo(other1) < 0 && other1.getEnd().compareTo(other2.getStart()) < 0 ) {
-										eventStart = (e1.getNode(true)==currentNode? e1.getC2() : e1.getC1()); 
+										eventStart = (e1.getNode(true)==currentNode? e1.getC2() : e1.getC1());
 										eventEnd = (e2.getNode(true)==currentNode? e2.getC2() : e2.getC1());
 									} else if (	currentNode.compareTo(other1) > 0 && other1.getStart().compareTo(other2.getEnd()) > 0) {
 										eventStart = (e2.getNode(true)==currentNode? e2.getC2() : e2.getC1());
-										eventEnd = (e1.getNode(true)==currentNode? e1.getC2() : e1.getC1());  
+										eventEnd = (e1.getNode(true)==currentNode? e1.getC2() : e1.getC1());
 									} else {
 										break;
 									}
@@ -1105,21 +1129,21 @@ public class Clove {
 									GenomicNode other1 = e1.otherNode(currentNode), other2 = e2.otherNode(currentNode);
 									if(other1.getStart().onSameChromosome(other2.getStart()) && other1.getEnd().compareTo(other2.getStart()) > 0){
 										GenomicCoordinate eventStart = (e2.getNode(true)==currentNode? e2.getC2() : e2.getC1()),
-										 	eventEnd = (e1.getNode(true)==currentNode? e1.getC2() : e1.getC1()),
-											eventInsert = (e1.getNode(true)==currentNode? e1.getC1() : e1.getC2());
-									if(eventStart.compareTo(eventEnd) >= 0){
-										System.out.println("Fishes!");
-									}
-									Event e3 = other1.existsDeletionEventTo(other2);
-									if(e3 != null){
-										newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_INVERTED_TRANSLOCATION, new Event[] {e1, e2, e3}, currentNode, eventInsert);
-										newComplexEvent.setCoord(eventStart);
-										//newComplexEvent.setId(e1.getId());
-										newComplexEvent.setId(e1.getId()+"+"+e2.getId()+"+"+e3.getId());
-										newComplexEvent.setRef(e1.getRef());
-										newComplexEvent.setAlt("<IVT>");
-										newComplexEvent.setFilter(e1.getFilter());
-										newComplexEvent.setQual(e1.getQual());
+												eventEnd = (e1.getNode(true)==currentNode? e1.getC2() : e1.getC1()),
+												eventInsert = (e1.getNode(true)==currentNode? e1.getC1() : e1.getC2());
+										if(eventStart.compareTo(eventEnd) >= 0){
+											System.out.println("Fishes!");
+										}
+										Event e3 = other1.existsDeletionEventTo(other2);
+										if(e3 != null){
+											newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_INVERTED_TRANSLOCATION, new Event[] {e1, e2, e3}, currentNode, eventInsert);
+											newComplexEvent.setCoord(eventStart);
+											//newComplexEvent.setId(e1.getId());
+											newComplexEvent.setId(e1.getId()+"+"+e2.getId()+"+"+e3.getId());
+											newComplexEvent.setRef(e1.getRef());
+											newComplexEvent.setAlt("<IVT>");
+											newComplexEvent.setFilter(e1.getFilter());
+											newComplexEvent.setQual(e1.getQual());
 //										tempInfo = e1.getInfo();
 //										//System.out.println(tempInfo+"\n");
 //										if (tempInfo.contains("SVTYPE")){
@@ -1134,22 +1158,22 @@ public class Clove {
 //											tempInfo.replace(tmpOld, tmpNew);
 //											newComplexEvent.setInfo(tempInfo);
 //										}
-										double readDepth = (checkRD? getReadDepth(samReader, eventStart.getChr(), eventStart.getPos(), eventEnd.getPos()) : -1);
-										tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+";CHR2="+eventStart.getChr()+";START="+Integer.toString(eventStart.getPos())+";END="+Integer.toString(eventEnd.getPos())+";ADP="+readDepth;
-										newComplexEvent.setInfo(tempInfo);
-										newComplexEvent.setCoord(eventInsert);
-										//writer.write(newComplexEvent.getC1().getChr()+"\t"+newComplexEvent.getC1().getPos()+"\t"+newComplexEvent.getId()+"\t"+newComplexEvent.getRef()+"\t"+newComplexEvent.getAlt()+"\t"+newComplexEvent.getQual()+"\t"+newComplexEvent.getFilter()+"\t"+newComplexEvent.getInfo()+"\n");
-									} else {
-										newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_INVERTED_DUPLICATION, new Event[] {e1, e2}, currentNode, eventInsert);
-										newComplexEvent.setCoord(eventStart);//
-										//newComplexEvent.setId(e1.getId());
-										newComplexEvent.setId(e1.getId()+"+"+e2.getId());
-										newComplexEvent.setRef(e1.getRef());
-										newComplexEvent.setAlt("<IVD>");
-										newComplexEvent.setFilter(e1.getFilter());
-										newComplexEvent.setQual(e1.getQual());
-										tempInfo = e1.getInfo();
-										//System.out.println(tempInfo+"\n");
+											double readDepth = (checkRD? getReadDepth(samReader, eventStart.getChr(), eventStart.getPos(), eventEnd.getPos()) : -1);
+											tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+";CHR2="+eventStart.getChr()+";START="+Integer.toString(eventStart.getPos())+";END="+Integer.toString(eventEnd.getPos())+";ADP="+readDepth;
+											newComplexEvent.setInfo(tempInfo);
+											newComplexEvent.setCoord(eventInsert);
+											//writer.write(newComplexEvent.getC1().getChr()+"\t"+newComplexEvent.getC1().getPos()+"\t"+newComplexEvent.getId()+"\t"+newComplexEvent.getRef()+"\t"+newComplexEvent.getAlt()+"\t"+newComplexEvent.getQual()+"\t"+newComplexEvent.getFilter()+"\t"+newComplexEvent.getInfo()+"\n");
+										} else {
+											newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_INVERTED_DUPLICATION, new Event[] {e1, e2}, currentNode, eventInsert);
+											newComplexEvent.setCoord(eventStart);//
+											//newComplexEvent.setId(e1.getId());
+											newComplexEvent.setId(e1.getId()+"+"+e2.getId());
+											newComplexEvent.setRef(e1.getRef());
+											newComplexEvent.setAlt("<IVD>");
+											newComplexEvent.setFilter(e1.getFilter());
+											newComplexEvent.setQual(e1.getQual());
+											tempInfo = e1.getInfo();
+											//System.out.println(tempInfo+"\n");
 //										if (tempInfo.contains("SVTYPE")){
 //											tmpOld = tempInfo.substring(tempInfo.indexOf("SVTYPE=")+7, tempInfo.indexOf("SVTYPE=")+10);
 //											tmpNew = newComplexEvent.getAlt();
@@ -1162,17 +1186,22 @@ public class Clove {
 //											tempInfo.replace(tmpOld, tmpNew);
 //											newComplexEvent.setInfo(tempInfo);
 //										}
-										double readDepth = (checkRD? getReadDepth(samReader, eventStart.getChr(), eventStart.getPos(), eventEnd.getPos()) : -1);
-										tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+";CHR2="+eventStart.getChr()+";START="+Integer.toString(eventStart.getPos())+";END="+Integer.toString(eventEnd.getPos())+";ADP="+readDepth;
-										newComplexEvent.setInfo(tempInfo);
-										newComplexEvent.setCoord(eventInsert);
-										//writer.write(newComplexEvent.getC1().getChr()+"\t"+newComplexEvent.getC1().getPos()+"\t"+newComplexEvent.getId()+"\t"+newComplexEvent.getRef()+"\t"+newComplexEvent.getAlt()+"\t"+newComplexEvent.getQual()+"\t"+newComplexEvent.getFilter()+"\t"+newComplexEvent.getInfo()+"\n");
+											double readDepth = (checkRD? getReadDepth(samReader, eventStart.getChr(), eventStart.getPos(), eventEnd.getPos()) : -1);
+											tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+";CHR2="+eventStart.getChr()+";START="+Integer.toString(eventStart.getPos())+";END="+Integer.toString(eventEnd.getPos())+";ADP="+readDepth;
+											newComplexEvent.setInfo(tempInfo);
+											newComplexEvent.setCoord(eventInsert);
+											//writer.write(newComplexEvent.getC1().getChr()+"\t"+newComplexEvent.getC1().getPos()+"\t"+newComplexEvent.getId()+"\t"+newComplexEvent.getRef()+"\t"+newComplexEvent.getAlt()+"\t"+newComplexEvent.getQual()+"\t"+newComplexEvent.getFilter()+"\t"+newComplexEvent.getInfo()+"\n");
+										}
 									}
 								}
+								break;
 							}
-							break;
-						}
-							
+							case BE1: {
+								if(e2.getType() == EVENT_TYPE.BE2){
+
+								}
+							}
+
 							default: //don't even attempt other types
 						}
 						//check if a new complex event has been generated
@@ -1198,7 +1227,7 @@ public class Clove {
 				}
 			}
 		}
-		
+
 		//while we're at it: let's run through the nodes again!
 		//this time for output
 		int totalEvents = 0;
@@ -1215,9 +1244,9 @@ public class Clove {
 					if(skipEvents.contains(e))
 						continue;
 					//if(currentNode.getEvents().size() < 2 && e instanceof ComplexEvent ){//&& e.otherNode(currentNode) != currentNode){// (e.getType() == EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_DUPLICATION || e.getType()==EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_TRANSLOCATION)){
-						e.processAdditionalInformation(); //TODO: this is a bit of a sly hack to classify insertions in Socrates... not sure how to do it more transparently. 	
-						switch(e.getType()) {
-						case INV1: 
+					e.processAdditionalInformation(); //TODO: this is a bit of a sly hack to classify insertions in Socrates... not sure how to do it more transparently.
+					switch(e.getType()) {
+						case INV1:
 						case INV2:
 							skipEvents.add(e);
 							//deleteEvents.add(e);
@@ -1244,7 +1273,7 @@ public class Clove {
 							skipEvents.add(e);
 							if(readDepth < 0 || readDepth > mean-interval){
 								//deleteEvents.add(e);
-								e.setFailFilter(); 
+								e.setFailFilter();
 							} else {
 								//System.out.print("read depth for event: "+readDepth+"\t");
 							}
@@ -1291,9 +1320,9 @@ public class Clove {
 							e.setAlt(Event.altVCF(e.getType()));
 							skipEvents.add(e);
 							break;
-						}
-						
-						//System.out.println(e);
+					}
+
+					//System.out.println(e);
 					//}
 					if(e.otherNode(currentNode) == currentNode){
 						skipEvents.add(e);
@@ -1310,13 +1339,13 @@ public class Clove {
 			}
 		}
 		//System.out.println("Total events: "+totalEvents);
-		
+
 		//compareToGoldStandard(goldStandard, genomicNodes, 150, true);
 		if(goldStandard != null)
 			compareToGoldStandard(goldStandard, genomicNodes, 150, false);
-	
+
 		//graphVisualisation("data/simul_ecoli_graph.gv", genomicNodes);
-		
+
 		count=0;
 		//reportEventComposition(genomicNodes);
 		/*VCF Output*/
@@ -1338,14 +1367,14 @@ public class Clove {
 				}
 			}
 		}
-		
-		writer.close();		
-		samReader.close();	
+
+		writer.close();
+		samReader.close();
 		//End Time
 		long endTime = System.nanoTime();
-		System.out.println("Took "+(endTime - startTime)/1000000000 + " seconds"); 
+		System.out.println("Took "+(endTime - startTime)/1000000000 + " seconds");
 	}
 
-	
+
 
 }

@@ -6,7 +6,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 
-enum EVENT_TYPE {INS, INV1, INV2, DEL, TAN, INVTX1, INVTX2, ITX1, ITX2, XXX, COMPLEX_INVERSION, COMPLEX_INVERTED_DUPLICATION, COMPLEX_DUPLICATION, COMPLEX_TRANSLOCATION, COMPLEX_INVERTED_TRANSLOCATION, COMPLEX_INTERCHROMOSOMAL_TRANSLOCATION, COMPLEX_INTERCHROMOSOMAL_DUPLICATION, COMPLEX_INTERCHROMOSOMAL_INVERTED_TRANSLOCATION, COMPLEX_INTERCHROMOSOMAL_INVERTED_DUPLICATION};
+enum EVENT_TYPE {INS, INV1, INV2, DEL, TAN, INVTX1, INVTX2, ITX1, ITX2, BE1, BE2, XXX,
+	COMPLEX_INVERSION, COMPLEX_INVERTED_DUPLICATION, COMPLEX_DUPLICATION, COMPLEX_TRANSLOCATION,
+	COMPLEX_INVERTED_TRANSLOCATION, COMPLEX_INTERCHROMOSOMAL_TRANSLOCATION, COMPLEX_INTERCHROMOSOMAL_DUPLICATION,
+	COMPLEX_INTERCHROMOSOMAL_INVERTED_TRANSLOCATION, COMPLEX_INTERCHROMOSOMAL_INVERTED_DUPLICATION};
 
 public class Event {
 
@@ -144,31 +147,45 @@ public class Event {
 	 * Function to classify a line of Socrates output into a genomic event type.
 	 * The distinctions between INV1/2 etc are arbitrary, and have to be consistent across all the inputs.
 	 */
-	private static EVENT_TYPE classifySocratesBreakpoint(GenomicCoordinate c1, String o1, GenomicCoordinate c2, String o2){
-		if(c1.onSameChromosome(c2)){
-			if(o1.equals(o2)){
-				if(o1.equals("+"))
+	private static EVENT_TYPE classifySocratesBreakpoint(GenomicCoordinate c1, String o1, GenomicCoordinate c2, String o2) {
+		if (o2.equals("")) {
+			System.out.println("Event was classified as breakend");
+			if (o1.equals("+")) {
+				return EVENT_TYPE.BE1;
+			} else {
+				return EVENT_TYPE.BE2;
+			}
+		} else if (o1.equals(o2)) {
+			System.out.println("Event was classified as Inversion");
+			if (c1.onSameChromosome(c2)) {
+				if (o1.equals("+"))
 					return EVENT_TYPE.INV1;
 				else
 					return EVENT_TYPE.INV2;
-			} else if (o1.equals("+") && c1.compareTo(c2) < 0 || o1.equals("-") && c1.compareTo(c2) >=0 ){
-				return EVENT_TYPE.DEL;
-			} else if (o1.equals("-") && c1.compareTo(c2) < 0 || o1.equals("+") && c1.compareTo(c2) >=0 ){
-				return EVENT_TYPE.TAN;
 			} else {
-				return EVENT_TYPE.XXX;
+				if (o1.equals("+"))
+					return EVENT_TYPE.INVTX1;
+				else
+					return EVENT_TYPE.INVTX2;
 			}
-		} else if(o1.equals(o2)) {
-			if(o1.equals("+"))
-				return EVENT_TYPE.INVTX1;
-			else
-				return EVENT_TYPE.INVTX2;
-		} else if(o1.equals("+") &&  c1.compareTo(c2) < 0 || o1.equals("-") && c1.compareTo(c2) >= 0){
-			return EVENT_TYPE.ITX1;
 		} else {
-			return EVENT_TYPE.ITX2;
+			System.out.println("Event was classified as OTHER");
+			if (c1.onSameChromosome(c2)) {
+				if (o1.equals("+") && c1.compareTo(c2) < 0 || o1.equals("-") && c1.compareTo(c2) >= 0) {
+					return EVENT_TYPE.DEL;
+				} else {
+					return EVENT_TYPE.TAN;
+				}
+			} else {
+				if (o1.equals("+") && c1.compareTo(c2) < 0 || o1.equals("-") && c1.compareTo(c2) >= 0) {
+					return EVENT_TYPE.ITX1;
+				} else {
+					return EVENT_TYPE.ITX2;
+				}
+			}
 		}
 	}
+
 	/*
 	 * Static function to handle the particularities of Delly output, and convert it into a general
 	 * purpose Event.
@@ -577,23 +594,34 @@ public class Event {
 
         String[] bits = output.split("\t");
 
+        System.out.println(output);
+
         String chr1 = bits[0], chr2 = "";
         String orientation1 = "", orientation2 = "";
         int p1 = Integer.parseInt(bits[1]), p2 = -1;
         String alt = bits[4];
         String[] result = Event.classifyAltGridssLumpy(alt);
 
-        chr2 = result[0];
-        p2 = Integer.parseInt(result[1]);
-        orientation1 = result[2];
-        orientation2 = result[3];
+		chr2 = result[0];
+		orientation1 = result[2];
+		orientation2 = result[3];
+
+		if(!result[1].isEmpty()) {
+			p2 = Integer.parseInt(result[1]);
+		} else {
+			p2 = 0;
+			System.out.println("I's empty, thats why");
+		}
+
+		String info="";
 
         GenomicCoordinate c1 = new GenomicCoordinate(chr1, p1);
         GenomicCoordinate c2 = new GenomicCoordinate(chr2, p2);
         EVENT_TYPE type = EVENT_TYPE.XXX;
-        if (!orientation1.equals("") && !orientation2.equals("")) {
+        if (!orientation1.equals("")) {
              type = Event.classifySocratesBreakpoint(c1, orientation1, c2, orientation2);
-        }
+			 info="SVTYPE="+type+";CHR2="+chr2+";END="+p2;
+		}
 
         pattern = Pattern.compile("SVTYPE=(.+?)");
         matcher = pattern.matcher(bits[7]);
@@ -603,7 +631,6 @@ public class Event {
         String ref = bits[3];
         String qual = bits[5];
         String filter = bits[6];
-        String info="SVTYPE="+type+";CHR2="+chr2+";END="+p2;
         if (matcher.groupCount() != 0){
             info = matcher.group(1);
         }
@@ -644,7 +671,7 @@ public class Event {
                 result[3] = "+";
             }
 
-        } else { // if(alt.contains("["))
+        } else if(alt.contains("[")){
 
             String[] item = alt.split("\\[");
             if (item.length == 3) {
@@ -663,7 +690,22 @@ public class Event {
                 result[2] = "+";
                 result[3] = "-";
             }
-        }
+        } else if(alt.contains(".")) {
+			result[0] = "";
+			result[1] = "";
+
+			if(alt.startsWith(".")) {
+				result[2] = "-";
+			} else {
+				result[2] = "+";
+			}
+
+			result[3] = "";
+
+		} else {
+			// leave empty
+			System.out.println("Found unknown ALT in GRIDSS input.");
+		}
 
         return result;
     }
