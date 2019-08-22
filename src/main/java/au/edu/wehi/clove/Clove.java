@@ -739,7 +739,8 @@ public class Clove {
 		String tempInfo = null;
 		//iterate through node sets again, and genotype events
 		for(Entry<String, TreeSet<GenomicNode>> tableEntry: genomicNodes.entrySet()) {
-			System.out.println("Nodes on chr:"+tableEntry.getValue().size());
+            HashSet<GenomicNode> removeNodes = new HashSet<GenomicNode>();
+            System.out.println("Nodes on chr "+tableEntry.getKey()+": "+tableEntry.getValue().size());
 			for(GenomicNode currentNode: tableEntry.getValue()){
 
 				//iterate through all event-event pairing in this node and assess for complex events
@@ -773,23 +774,12 @@ public class Clove {
 									GenomicCoordinate invend   = (e2.getC2().compareTo(e2.getC1()) < 0? e2.getC1() : e2.getC2());
 									//System.out.println(e1.getC1()+"\t"+e1.getC2()+"\t"+e2.getC1()+"\t"+e2.getC2()+"\t"+invstart+"\t"+invend);
 									newComplexEvent = new ComplexEvent(invstart, invend, EVENT_TYPE.COMPLEX_INVERSION, (new Event[] {e1, e2}), true, currentNode);
-//									//newComplexEvent.setId(e1.getId());
-//									newComplexEvent.setCoord(invstart);
-//									newComplexEvent.setId(e1.getId()+"+"+e2.getId());
-//									newComplexEvent.setRef(e1.getRef());
-//									//newComplexEvent.setAlt("<CIV>");
-//									newComplexEvent.setFilter(e1.getFilter());
-//									newComplexEvent.setQual(e1.getQual());
 
 									double readDepth = (checkRD? getReadDepth(samReader, invstart.getChr(), invstart.getPos(), invend.getPos()) : -1);
-									//tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+"; CHR2="+invend.getChr()+"; END="+Integer.toString(invend.getPos());
+
 									tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+";CHR2="+invend.getChr()+";END="+Integer.toString(invend.getPos())+";ADP="+readDepth;
 									newComplexEvent.setInfo(tempInfo);
 
-									//writer.write(newComplexEvent.getC1().getChr()+"\t"+invstart+"\t"+newComplexEvent.getId()+"\t"+newComplexEvent.getRef()+"\t"+newComplexEvent.getAlt()+"\t"+newComplexEvent.getQual()+"\t"+newComplexEvent.getFilter()+"\t"+newComplexEvent.getInfo()+"\n");
-									//currentNode?
-									//System.out.println(currentNode.getStart().toString());
-									//	System.out.println(currentNode.getEnd().toString());
 								}
 								else if(e2.getType() == EVENT_TYPE.INV2 ){
 									GenomicNode other1 = e1.otherNode(currentNode), other2 = e2.otherNode(currentNode);
@@ -1079,15 +1069,157 @@ public class Clove {
 				for(Event e: removeEvents){
 					e.getNode(true).getEvents().remove(e);
 					e.getNode(false).getEvents().remove(e);
+
+					//TODO: Think about why events are not replaced by complex ones (probably because one event can only have two Coordinates and two nodes)
+                    //Maybe we should make number of coordinates and nodes arbitrary
+					if(e.getNode(true).getEvents().size()==0){
+					    System.out.println("Node is empty");
+                        removeNodes.add(e.getNode(true));
+                    }
+                    if(e.getNode(false).getEvents().size()==0){
+                        System.out.println("Node is empty");
+                        removeNodes.add(e.getNode(false));
+                    }
 				}
 				for(Event e: newComplexEvents){
 					e.getNode(true).getEvents().add(e);
 				}
+
 			}
+
+            for(GenomicNode n: removeNodes){
+                tableEntry.getValue().remove(n);
+            }
 		}
 
-		//while we're at it: let's run through the nodes again!
-		//this time for output
+		//TODO: Export this to function
+
+        maxDistanceForNodeMerge = 5000;
+
+        for(Entry<String, TreeSet<GenomicNode>> tableEntry: genomicNodes.entrySet()) {
+            int nodesMerged = 0;
+            GenomicNode[] staticList = new GenomicNode[tableEntry.getValue().size()];
+            tableEntry.getValue().toArray(staticList);
+            if(staticList.length == 0)
+                break;
+            GenomicNode lastNode = staticList[0], currentNode = null;
+            for(int i = 1; i < staticList.length; i++){
+                currentNode = staticList[i];
+                if(currentNode.getStart().distanceTo(lastNode.getEnd()) < maxDistanceForNodeMerge){
+
+                    lastNode.mergeWithNode(currentNode);
+                    if(!tableEntry.getValue().remove(currentNode))
+                        System.out.println("NO CAN DO");
+                    nodesMerged++;
+                } else {
+                    lastNode.checkForRedundantEvents(maxDistanceForNodeMerge);
+                    lastNode = currentNode;
+                }
+            }
+            lastNode.checkForRedundantEvents(maxDistanceForNodeMerge);
+            System.out.println("Nodes merged in second run: "+nodesMerged);
+        }
+        System.out.println("Events merged in second run: "+GenomicNode.global_event_merge_counter);
+
+        // This time we iterate to find more specific SVs like Knockouts and "unconnected Duplications"
+
+        for (Entry<String, TreeSet<GenomicNode>> tableEntry : genomicNodes.entrySet()) {
+            HashSet<GenomicNode> removeNodes = new HashSet<GenomicNode>();
+            System.out.println("Nodes on chr " + tableEntry.getKey() + ": " + tableEntry.getValue().size());
+            for (GenomicNode currentNode : tableEntry.getValue()) {
+
+                //iterate through all event-event pairing in this node and assess for complex events
+
+                if (currentNode.getStart().getPos() == -1) {
+                    //this is created by all the breakends that have no real second coordinate
+                    //TODO: Prevent this behaviour in a more reasonable fashion
+                    continue;
+                }
+
+                Event e1, e2;
+                HashSet<Event> removeEvents = new HashSet<Event>();
+                HashSet<ComplexEvent> newComplexEvents = new HashSet<ComplexEvent>();
+                ComplexEvent newComplexEvent = null;
+
+                for (int i = 0; i < currentNode.getEvents().size(); i++) {
+                    e1 = currentNode.getEvents().get(i);
+                    for (int j = 0; j < currentNode.getEvents().size(); j++) {
+                        e2 = currentNode.getEvents().get(j);
+
+                        // skip removed events and events where both nodes are the same
+                        if (e1 == e2 || removeEvents.contains(e2) || removeEvents.contains(e1)
+                                || e1.otherNode(currentNode) == currentNode || e2.otherNode(currentNode) == currentNode)
+                            continue;
+                        switch (e1.getType()) {
+                            //inversions
+                            case ITX1:
+                                if(e2.getType()==EVENT_TYPE.ITX2 && Event.sameNodeSets(e1, e2)){
+                                    if (e2.getNode(true)==currentNode && e1.getNode(true)==currentNode){
+                                        //that' right, else it would be weird
+
+                                        GenomicCoordinate eventStart, eventEnd, eventReplacement;
+
+                                        eventStart = (e1.getC1().compareTo(e2.getC2()) < 0?e1.getC1():e2.getC2());
+                                        eventEnd = (e1.getC1().compareTo(e2.getC2()) < 0?e2.getC1():e1.getC2());
+                                        eventReplacement = (e1.getC1().compareTo(e2.getC2()) < 0?e1.getC2():e2.getC1());
+
+                                        newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_BIG_INSERTION, (new Event[]{e1, e2}), true, currentNode, eventReplacement);
+
+                                        double readDepth = (checkRD ? getReadDepth(samReader, eventStart.getChr(), eventStart.getPos(), eventEnd.getPos()) : -1);
+
+                                        tempInfo = "SVTYPE=" + newComplexEvent.getAlt().substring(1, 4) + ";CHR2=" + eventEnd.getChr() + ";END=" + Integer.toString(eventEnd.getPos()) + ";ADP=" + readDepth;
+                                        newComplexEvent.setInfo(tempInfo);
+                                    }
+                                    // Complex InterChromosomal Replacement
+                                }
+                                break;
+                            case INVTX1:
+                                if(e2.getType()==EVENT_TYPE.INVTX2 && Event.sameNodeSets(e1, e2)){
+                                    // Complex InterChromosomal INVERTED Replacement
+                                }
+                                break;
+                            case BE1:
+                                if(e2.getType()==EVENT_TYPE.BE2 || e2.getType()==EVENT_TYPE.ITX2 || e2.getType()==EVENT_TYPE.INVTX2 ){
+                                    // Possible Vector Part
+                                }
+                                break;
+                            default:
+                                break;
+
+                        }
+
+                    }
+                }
+
+                for (Event e : removeEvents) {
+                    e.getNode(true).getEvents().remove(e);
+                    e.getNode(false).getEvents().remove(e);
+
+                    //TODO: Think about why events are not replaced by complex ones (probably because one event can only have two Coordinates and two nodes)
+                    //Maybe we should make number of coordinates and nodes arbitrary
+                    if (e.getNode(true).getEvents().size() == 0) {
+                        System.out.println("Node is empty");
+                        removeNodes.add(e.getNode(true));
+                    }
+                    if (e.getNode(false).getEvents().size() == 0) {
+                        System.out.println("Node is empty");
+                        removeNodes.add(e.getNode(false));
+                    }
+                }
+                for (Event e : newComplexEvents) {
+                    e.getNode(true).getEvents().add(e);
+                }
+
+            }
+
+            for (GenomicNode n : removeNodes) {
+                tableEntry.getValue().remove(n);
+            }
+        }
+
+
+        //while we're at it: let's run through the nodes again!
+		//this time for output an combining ITXes or single breakends
 		int totalEvents = 0;
 		for (Entry<String, TreeSet<GenomicNode>> tableEntry : genomicNodes.entrySet()) {
 			//System.out.println("Working on Entry: "+tableEntry.toString());

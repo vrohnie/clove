@@ -20,7 +20,9 @@ enum EVENT_TYPE {
 	// insertion events
 	COMPLEX_BIG_INSERTION,
 	//knockout events
-	COMPLEX_KNOCKOUT}
+	COMPLEX_REPLACED_DELETION, COMPLEX_INVERTED_REPLACED_DELETION,
+	// vector integrations
+	VECTOR_PARTS}
 
 public class Event {
 
@@ -967,8 +969,10 @@ public class Event {
 			return "<IVD>";
 		} else if(type.equals(EVENT_TYPE.COMPLEX_BIG_INSERTION)){
 			return "<ISB>";
-		} else if(type.equals(EVENT_TYPE.COMPLEX_KNOCKOUT)){
-			return "<ISB>";
+		} else if(type.equals(EVENT_TYPE.COMPLEX_INVERTED_REPLACED_DELETION)){
+			return "<RDE>";
+		} else if(type.equals(EVENT_TYPE.COMPLEX_REPLACED_DELETION)) {
+			return "<IRD>";
 		} else {
 			return "<XXX>";
 		} 
