@@ -6,10 +6,21 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 
-enum EVENT_TYPE {INS, INV1, INV2, DEL, TAN, INVTX1, INVTX2, ITX1, ITX2, BE1, BE2, XXX,
-	COMPLEX_INVERSION, COMPLEX_INVERTED_DUPLICATION, COMPLEX_DUPLICATION, COMPLEX_TRANSLOCATION,
-	COMPLEX_INVERTED_TRANSLOCATION, COMPLEX_INTERCHROMOSOMAL_TRANSLOCATION, COMPLEX_INTERCHROMOSOMAL_DUPLICATION,
-	COMPLEX_INTERCHROMOSOMAL_INVERTED_TRANSLOCATION, COMPLEX_INTERCHROMOSOMAL_INVERTED_DUPLICATION};
+enum EVENT_TYPE {
+	// simple event types
+	INS, INV1, INV2, DEL, TAN, INVTX1, INVTX2, ITX1, ITX2, BE1, BE2, XXX,
+	// inversion
+	COMPLEX_INVERSION,
+	// duplication events
+	COMPLEX_INVERTED_DUPLICATION, COMPLEX_DUPLICATION,
+	COMPLEX_INTERCHROMOSOMAL_DUPLICATION, COMPLEX_INTERCHROMOSOMAL_INVERTED_DUPLICATION,
+	// translocation events
+	COMPLEX_TRANSLOCATION, COMPLEX_INVERTED_TRANSLOCATION, COMPLEX_INTERCHROMOSOMAL_TRANSLOCATION,
+	COMPLEX_INTERCHROMOSOMAL_INVERTED_TRANSLOCATION,
+	// insertion events
+	COMPLEX_BIG_INSERTION,
+	//knockout events
+	COMPLEX_KNOCKOUT}
 
 public class Event {
 
@@ -138,7 +149,7 @@ public class Event {
 			return new Event(c1, c2, type, insert);
 		}
 		
-		String alt=altVCF(type);
+		String alt= getAltVCF(type);
 		String info="SVTYPE="+alt.substring(1, 4)+";CHR2="+chr2+";END="+p2;
 				
 		return new Event(c1, c2, type, id, ref, alt, qual, filter, info, new HashSet<Clove.SV_ALGORITHM>() {{add(Clove.SV_ALGORITHM.SOCRATES);}}, 1);
@@ -149,14 +160,12 @@ public class Event {
 	 */
 	private static EVENT_TYPE classifySocratesBreakpoint(GenomicCoordinate c1, String o1, GenomicCoordinate c2, String o2) {
 		if (o2.equals("")) {
-			System.out.println("Event was classified as breakend");
 			if (o1.equals("+")) {
 				return EVENT_TYPE.BE1;
 			} else {
 				return EVENT_TYPE.BE2;
 			}
 		} else if (o1.equals(o2)) {
-			System.out.println("Event was classified as Inversion");
 			if (c1.onSameChromosome(c2)) {
 				if (o1.equals("+"))
 					return EVENT_TYPE.INV1;
@@ -169,7 +178,6 @@ public class Event {
 					return EVENT_TYPE.INVTX2;
 			}
 		} else {
-			System.out.println("Event was classified as OTHER");
 			if (c1.onSameChromosome(c2)) {
 				if (o1.equals("+") && c1.compareTo(c2) < 0 || o1.equals("-") && c1.compareTo(c2) >= 0) {
 					return EVENT_TYPE.DEL;
@@ -349,7 +357,7 @@ public class Event {
 		EVENT_TYPE type = classifyMetaSVBreakpoint(alt, chr1, chr2, o1, o2);
 		
 		if(type == EVENT_TYPE.COMPLEX_INVERSION){
-			Event e =  new ComplexEvent(c1, c2, type, new Event[] {}, null);
+			Event e =  new ComplexEvent(c1, c2, type, new Event[] {}, true,null);
 			e.setAlt("<CIV>");
 			e.setCoord(c1);
 			return e;
@@ -438,7 +446,7 @@ public class Event {
 		EVENT_TYPE type = classifyCrestBreakpoint(t.nextToken(), chr1, chr2, o1, o2);
 		
 		if(type == EVENT_TYPE.COMPLEX_INVERSION){
-			Event e =  new ComplexEvent(c1, c2, type, new Event[] {}, null);
+			Event e =  new ComplexEvent(c1, c2, type, new Event[] {}, true, null);
 			e.setAlt("<CIV>");
 			e.setCoord(c1);
 			return e;
@@ -469,13 +477,13 @@ public class Event {
 		EVENT_TYPE type = classifyCrestBreakpoint(t.nextToken(), chr1, chr2, o1, o2);
 		
 		if(type == EVENT_TYPE.COMPLEX_INVERSION){
-			Event e =  new ComplexEvent(c1, c2, type, new Event[] {}, null);
+			Event e =  new ComplexEvent(c1, c2, type, new Event[] {}, true, null);
 			e.setAlt("<CIV>");
 			e.setCoord(c1);
 			return e;
 		}
 		
-		String alt=altVCF(type);
+		String alt= getAltVCF(type);
 		String info="SVTYPE="+alt.substring(1, 4)+";CHR2="+chr2+";END="+p2;
 		
 		return new Event(c1, c2, type, id, ref, alt, qual, filter, info, new HashSet<Clove.SV_ALGORITHM>() {{add(Clove.SV_ALGORITHM.CREST);}}, 1);
@@ -594,8 +602,6 @@ public class Event {
 
         String[] bits = output.split("\t");
 
-        System.out.println(output);
-
         String chr1 = bits[0], chr2 = "";
         String orientation1 = "", orientation2 = "";
         int p1 = Integer.parseInt(bits[1]), p2 = -1;
@@ -608,9 +614,6 @@ public class Event {
 
 		if(!result[1].isEmpty()) {
 			p2 = Integer.parseInt(result[1]);
-		} else {
-			p2 = 0;
-			System.out.println("I's empty, thats why");
 		}
 
 		String info="";
@@ -631,9 +634,10 @@ public class Event {
         String ref = bits[3];
         String qual = bits[5];
         String filter = bits[6];
-        if (matcher.groupCount() != 0){
-            info = matcher.group(1);
-        }
+//        if (matcher.groupCount() != 0){
+//        	System.out.println(matcher.toString());
+//            info = matcher.group(1);
+//        }
 
         return new Event(
                 c1, c2, type, id, ref, alt, qual, filter, info,
@@ -704,7 +708,7 @@ public class Event {
 
 		} else {
 			// leave empty
-			System.out.println("Found unknown ALT in GRIDSS input.");
+			System.err.println("Found unknown ALT in GRIDSS input.");
 		}
 
         return result;
@@ -751,7 +755,7 @@ public class Event {
             
             GenomicCoordinate c1 = new GenomicCoordinate(chr1, p1);
             GenomicCoordinate c2 = new GenomicCoordinate(chr2, p2);
-    		Event e =  new ComplexEvent(c1, c2, EVENT_TYPE.COMPLEX_INVERSION, new Event[] {}, null);
+    		Event e =  new ComplexEvent(c1, c2, EVENT_TYPE.COMPLEX_INVERSION, new Event[] {}, true,null);
     		e.setAlt("<CIV>");
     		e.setCoord(c1);
     			return e;
@@ -924,7 +928,7 @@ public class Event {
 		coord = newCoord;
 	}
 
-	public static String altVCF(EVENT_TYPE type){
+	public static String getAltVCF(EVENT_TYPE type){
 		if(type.equals(EVENT_TYPE.DEL)){
 			return "<DEL>";
 		} else if(type.equals(EVENT_TYPE.INS)){
@@ -936,13 +940,17 @@ public class Event {
 		} else if(type.equals(EVENT_TYPE.INV2)){
 			return "<INV>";
 		} else if(type.equals(EVENT_TYPE.INVTX1)){
-			return "<INV>";
+			return "<ITX>";
 		} else if(type.equals(EVENT_TYPE.INVTX2)){
-			return "<INV>";
+			return "<ITX>";
 		} else if(type.equals(EVENT_TYPE.ITX1)){
-			return "<TRA>";
+			return "<ITX>";
 		} else if(type.equals(EVENT_TYPE.ITX2)){
-			return "<TRA>";
+			return "<ITX>";
+		} else if(type.equals(EVENT_TYPE.BE1)){
+			return "<BE>";
+		} else if(type.equals(EVENT_TYPE.BE2)){
+			return "<BE>";
 		} else if(type.equals(EVENT_TYPE.COMPLEX_DUPLICATION)){
 			return "<DUP>";
 		} else if(type.equals(EVENT_TYPE.COMPLEX_INVERTED_TRANSLOCATION)){
@@ -957,6 +965,10 @@ public class Event {
 			return "<IVT>";
 		} else if(type.equals(EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_INVERTED_DUPLICATION)){
 			return "<IVD>";
+		} else if(type.equals(EVENT_TYPE.COMPLEX_BIG_INSERTION)){
+			return "<ISB>";
+		} else if(type.equals(EVENT_TYPE.COMPLEX_KNOCKOUT)){
+			return "<ISB>";
 		} else {
 			return "<XXX>";
 		} 
@@ -982,7 +994,11 @@ public class Event {
 				+"\t"+this.getInfo()+";SUPPORT="+this.calledBy.size()+","+this.calledTimes;
 	}
 	
-	public void setFailFilter(){
-		this.filter = "FAIL";
+	public void addFilter( String filter){
+    	if(this.getFilter() == "PASS"){
+			this.filter = filter;
+		} else {
+    		this.filter = this.getFilter() + ";" + filter;
+		}
 	}
 }

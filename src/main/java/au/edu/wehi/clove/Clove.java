@@ -1,7 +1,6 @@
 package au.edu.wehi.clove;
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -24,6 +23,8 @@ import htsjdk.samtools.*;
 import htsjdk.samtools.util.Interval;
 import htsjdk.samtools.util.IntervalList;
 import htsjdk.samtools.util.SamLocusIterator;
+
+import static au.edu.wehi.clove.Event.getAltVCF;
 
 
 class EventIterator implements Iterator<Event> {
@@ -115,7 +116,7 @@ public class Clove {
 		return false;
 	}
 	private static double fetchStuff(
-			String chr, int start, int end, String orientation,  SAMFileReader bamFile) {
+			String chr, int start, int end, String orientation,  SamReader bamFile) {
 
 		SAMRecordIterator iter = bamFile.queryOverlapping(chr, start, end);
 
@@ -432,36 +433,35 @@ public class Clove {
 
 
 	//private static double getReadDepth(String str, String chr, int start, int end){
-	private static double getReadDepth(SAMFileReader samReader, String chr, int start, int end){
+	private static double getReadDepth(SamReader samReader, String chr, int start, int end){
 
 		if(start >= end){
 			return -1;
 		}
 
 		//SAMFileReader  samReader=new  SAMFileReader(new  File(str));
-		String chromId=chr;
-		int chromStart=start;
-		int chromEnd=end;
-		int pos=0;
-		int depth=0;
+;
+		int depth;
 		int total=0;
 		int count=0;
-		Interval  interval=new  Interval(chromId,chromStart,chromEnd);
+
+		Interval  interval=new  Interval(chr,start,end);
 		IntervalList  iL=new  IntervalList(samReader.getFileHeader());
 		iL.add(interval);
 
 		SamLocusIterator  sli=new  SamLocusIterator(samReader,iL,true);
+		try {
+			for (Iterator<SamLocusIterator.LocusInfo> iter = sli.iterator(); iter.hasNext(); ) {
+				SamLocusIterator.LocusInfo locusInfo = iter.next();
+				depth = locusInfo.getRecordAndPositions().size();
 
-		for(Iterator<SamLocusIterator.LocusInfo> iter=sli.iterator(); iter.hasNext();){
-			SamLocusIterator.LocusInfo  locusInfo=iter.next();
-			//pos = locusInfo.getPosition();
-			depth = locusInfo.getRecordAndPositions().size();
-			total+=depth;
-			count++;
-			//System.out.println("POS="+pos+" depth:"+depth);
+				total += depth;
+				count++;
+			}
+			sli.close();
+		} catch (Exception e) {
+			return -1;
 		}
-		//System.out.println("total: "+total+"\tcount: "+count);
-		sli.close();
 		//samReader.close();
 
 		return (double)total/count;
@@ -554,7 +554,7 @@ public class Clove {
 		/*parse the options from the command line */
 		int argindex = 0;
 		ArrayList<Tuple<BufferedReader, SV_ALGORITHM>> inputs = new ArrayList<Tuple<BufferedReader,SV_ALGORITHM>>();
-		SAMFileReader  samReader = null;
+		SamReader samReader = null;
 		double mean = 0;
 		double interval= 0;
 		String goldStandard = null;
@@ -573,7 +573,8 @@ public class Clove {
 				}
 			} else if (args[argindex].equals("-b")){
 				try {
-					samReader=new  SAMFileReader(new  File(args[argindex + 1]));
+					SamReaderFactory samReaderFactory = SamReaderFactory.makeDefault().validationStringency(ValidationStringency.SILENT);
+					samReader = samReaderFactory.open(new File(args[argindex + 1]));
 					argindex += 2;
 				} catch (Exception e){
 					System.err.println("Unable to load bam file.");
@@ -651,7 +652,6 @@ public class Clove {
 						e = Event.createNewEventFromGRIDSSOutput(line);
 						//if (e.getType() == EVENT_TYPE.BE1 || e.getType() == EVENT_TYPE.BE2) continue;
 						break;
-
 					case LUMPY:		e = Event.createNewEventFromLUMPYOutput(line); break;
 					default:		e = null;
 				}
@@ -744,6 +744,12 @@ public class Clove {
 
 				//iterate through all event-event pairing in this node and assess for complex events
 
+				if(currentNode.getStart().getPos() == -1){
+					//this is created by all the breakends that have no real second coordinate
+					//TODO: Prevent this behaviour in a more reasonable fashion
+					continue;
+				}
+
 				Event e1, e2;
 				HashSet<Event> removeEvents = new HashSet<Event>();
 				HashSet<ComplexEvent> newComplexEvents = new HashSet<ComplexEvent>();
@@ -766,28 +772,15 @@ public class Clove {
 									GenomicCoordinate invstart = (e1.getC1().compareTo(e1.getC2()) < 0? e1.getC1() : e1.getC2());
 									GenomicCoordinate invend   = (e2.getC2().compareTo(e2.getC1()) < 0? e2.getC1() : e2.getC2());
 									//System.out.println(e1.getC1()+"\t"+e1.getC2()+"\t"+e2.getC1()+"\t"+e2.getC2()+"\t"+invstart+"\t"+invend);
-									newComplexEvent = new ComplexEvent(invstart, invend, EVENT_TYPE.COMPLEX_INVERSION, (new Event[] {e1, e2}), currentNode);
-									//newComplexEvent.setId(e1.getId());
-									newComplexEvent.setCoord(invstart);
-									newComplexEvent.setId(e1.getId()+"+"+e2.getId());
-									newComplexEvent.setRef(e1.getRef());
-									newComplexEvent.setAlt("<CIV>");
-									newComplexEvent.setFilter(e1.getFilter());
-									newComplexEvent.setQual(e1.getQual());
-//									tempInfo = e1.getInfo();
-//									//System.out.println(tempInfo+"\n");
-//									if (tempInfo.contains("SVTYPE")){
-//										tmpOld = tempInfo.substring(tempInfo.indexOf("SVTYPE=")+7, tempInfo.indexOf("SVTYPE=")+10);
-//										tmpNew = newComplexEvent.getAlt();
-//										tempInfo=tempInfo.replace(tmpOld, tmpNew);
-//										tmpOld = tempInfo.substring(tempInfo.indexOf("CHR2=")+5, tempInfo.indexOf(";",tempInfo.indexOf("CHR2=")));
-//										tmpNew = invend.getChr();
-//										tempInfo=tempInfo.replace(tmpOld, tmpNew);
-//										tmpOld = tempInfo.substring(tempInfo.indexOf(";END=")+5, tempInfo.indexOf(";CT",tempInfo.indexOf(";END=")));
-//										tmpNew = Integer.toString(invend.getPos());
-//										tempInfo.replace(tmpOld, tmpNew);
-//										newComplexEvent.setInfo(tempInfo);
-//									}
+									newComplexEvent = new ComplexEvent(invstart, invend, EVENT_TYPE.COMPLEX_INVERSION, (new Event[] {e1, e2}), true, currentNode);
+//									//newComplexEvent.setId(e1.getId());
+//									newComplexEvent.setCoord(invstart);
+//									newComplexEvent.setId(e1.getId()+"+"+e2.getId());
+//									newComplexEvent.setRef(e1.getRef());
+//									//newComplexEvent.setAlt("<CIV>");
+//									newComplexEvent.setFilter(e1.getFilter());
+//									newComplexEvent.setQual(e1.getQual());
+
 									double readDepth = (checkRD? getReadDepth(samReader, invstart.getChr(), invstart.getPos(), invend.getPos()) : -1);
 									//tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+"; CHR2="+invend.getChr()+"; END="+Integer.toString(invend.getPos());
 									tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+";CHR2="+invend.getChr()+";END="+Integer.toString(invend.getPos())+";ADP="+readDepth;
@@ -806,67 +799,26 @@ public class Clove {
 											GenomicCoordinate invstart = (e2.getNode(true) == currentNode ? e2.getC2() : e2.getC1() ),
 													invend   = (e1.getNode(true) == currentNode ? e1.getC2() : e1.getC1() ),
 													insert   = (e1.getNode(true) == currentNode ? e1.getC1() : e1.getC2() );
-											newComplexEvent = new ComplexEvent(invstart, invend, EVENT_TYPE.COMPLEX_INVERTED_TRANSLOCATION, (new Event[] {e1, e2, e3}), currentNode, insert);
-											//newComplexEvent.setId(e1.getId());
-											newComplexEvent.setCoord(invstart);
-											newComplexEvent.setId(e1.getId()+"+"+e2.getId());
-											newComplexEvent.setRef(e1.getRef());
-											newComplexEvent.setAlt("<CVT>");
-											newComplexEvent.setFilter(e1.getFilter());
-											newComplexEvent.setQual(e1.getQual());
-//											 tempInfo = e1.getInfo();
-//											 //System.out.println(tempInfo+"\n");
-//											 if (tempInfo.contains("SVTYPE")){
-//												 tmpOld = tempInfo.substring(tempInfo.indexOf("SVTYPE=")+7, tempInfo.indexOf("SVTYPE=")+10);
-//												 tmpNew = newComplexEvent.getAlt();
-//												 tempInfo=tempInfo.replace(tmpOld, tmpNew);
-//												 tmpOld = tempInfo.substring(tempInfo.indexOf("CHR2=")+5, tempInfo.indexOf(";",tempInfo.indexOf("CHR2=")));
-//												 tmpNew = invend.getChr();
-//												 tempInfo=tempInfo.replace(tmpOld, tmpNew);
-//												 tmpOld = tempInfo.substring(tempInfo.indexOf(";END=")+5, tempInfo.indexOf(";CT",tempInfo.indexOf(";END=")));
-//												 tmpNew = Integer.toString(invend.getPos());
-//												 tempInfo.replace(tmpOld, tmpNew);
-//												 newComplexEvent.setInfo(tempInfo);
-//											 }
+											newComplexEvent = new ComplexEvent(invstart, invend, EVENT_TYPE.COMPLEX_INVERTED_TRANSLOCATION, (new Event[] {e1, e2, e3}), true,  currentNode, insert);
+
 											double readDepth = (checkRD? getReadDepth(samReader, invstart.getChr(), invstart.getPos(), invend.getPos()) : -1);
-											//tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+"; CHR2="+invend.getChr()+"; END="+Integer.toString(invend.getPos());
 											tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+";CHR2="+invend.getChr()+";END="+Integer.toString(invend.getPos())+";ADP="+readDepth;
 											newComplexEvent.setInfo(tempInfo);
-											//writer.write(newComplexEvent.getC1().getChr()+"\t"+invstart+"\t"+newComplexEvent.getId()+"\t"+newComplexEvent.getRef()+"\t"+newComplexEvent.getAlt()+"\t"+newComplexEvent.getQual()+"\t"+newComplexEvent.getFilter()+"\t"+newComplexEvent.getInfo()+"\n");
+
 										} else {
-											//System.out.println("INVDUP!"+e1+e2);
+
 											GenomicCoordinate invstart = (e2.getNode(true) == currentNode ? e2.getC2() : e2.getC1() ),
 													invend   = (e1.getNode(true) == currentNode ? e1.getC2() : e1.getC1() ),
 													insert   = (e1.getNode(true) == currentNode ? e1.getC1() : e1.getC2() );
-											newComplexEvent = new ComplexEvent(invstart, invend, EVENT_TYPE.COMPLEX_INVERTED_DUPLICATION, (new Event[] {e1, e2}), currentNode, insert);
-											//newComplexEvent.setId(e1.getId());
-											newComplexEvent.setCoord(invstart);
-											newComplexEvent.setId(e1.getId()+"+"+e2.getId());
-											newComplexEvent.setRef(e1.getRef());
-											newComplexEvent.setAlt("<CVD>");
-											newComplexEvent.setFilter(e1.getFilter());
-											newComplexEvent.setQual(e1.getQual());
-//											tempInfo = e1.getInfo();
-//											//System.out.println(tempInfo+"\n");
-//											if (tempInfo.contains("SVTYPE")){
-//												tmpOld = tempInfo.substring(tempInfo.indexOf("SVTYPE=")+7, tempInfo.indexOf("SVTYPE=")+10);
-//												tmpNew = newComplexEvent.getAlt();
-//												tempInfo=tempInfo.replace(tmpOld, tmpNew);
-//												tmpOld = tempInfo.substring(tempInfo.indexOf("CHR2=")+5, tempInfo.indexOf(";",tempInfo.indexOf("CHR2=")));
-//												tmpNew = invend.getChr();
-//												tempInfo=tempInfo.replace(tmpOld, tmpNew);
-//												tmpOld = tempInfo.substring(tempInfo.indexOf(";END=")+5, tempInfo.indexOf(";CT",tempInfo.indexOf(";END=")));
-//												tmpNew = Integer.toString(invend.getPos());
-//												tempInfo.replace(tmpOld, tmpNew);
-//												newComplexEvent.setInfo(tempInfo);
-//											}
+											newComplexEvent = new ComplexEvent(invstart, invend, EVENT_TYPE.COMPLEX_INVERTED_DUPLICATION, (new Event[] {e1, e2}), true, currentNode, insert);
+
 											double readDepth = (checkRD? getReadDepth(samReader, invstart.getChr(), invstart.getPos(), invend.getPos()) : -1);
-											//tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+"; CHR2="+invend.getChr()+"; END="+Integer.toString(invend.getPos());
-//											tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+"; CHR2="+invend.getChr()+"; END="+Integer.toString(invend.getPos())+"; ADP="+readDepth;
+
 											tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+";CHR2="+invstart.getChr()+";START="+Integer.toString(invstart.getPos())+";END="+Integer.toString(invend.getPos())+";ADP="+readDepth;
+
+											//TODO:DO I need this?
 											newComplexEvent.setInfo(tempInfo);
 											newComplexEvent.setCoord(insert);
-											//writer.write(newComplexEvent.getC1().getChr()+"\t"+invstart+"\t"+newComplexEvent.getId()+"\t"+newComplexEvent.getRef()+"\t"+newComplexEvent.getAlt()+"\t"+newComplexEvent.getQual()+"\t"+newComplexEvent.getFilter()+"\t"+newComplexEvent.getInfo()+"\n");
 										}
 									}
 								}
@@ -883,9 +835,9 @@ public class Clove {
 											|| other2.compareTo(other1) < 0 && other1.compareTo(currentNode) < 0){
 										Event e3 = other1.existsDeletionEventTo(other2);
 										if(e3 != null){
-											//System.out.println("Translocation between "+e1+ " and "+ e2);
-											//intrachromosomal translocations are actually ambiguous as to where they come from and got to
-											//as a convention, we call the smaller bit the translocated one inserted into the larger bit.
+											// System.out.println("Translocation between "+e1+ " and "+ e2);
+											// intrachromosomal translocations are actually ambiguous as to where they come from and got to
+											// as a convention, we call the smaller bit the translocated one inserted into the larger bit.
 											if(e1.size() < e3.size()) {
 												//area under e1 is translocated
 												GenomicCoordinate transtart, tranend;
@@ -898,34 +850,14 @@ public class Clove {
 												}
 												GenomicCoordinate traninsert = (e2.getNode(true) == currentNode? e2.getC2() : e2.getC1());
 												GenomicNode hostingNode = (e2.getNode(true) == currentNode? e2.getNode(false) : e2.getNode(true));
-												newComplexEvent = new ComplexEvent(transtart, tranend, EVENT_TYPE.COMPLEX_TRANSLOCATION, (new Event[] {e1, e2, e3}), hostingNode, traninsert);
-												//newComplexEvent.setId(e1.getId());
-												newComplexEvent.setCoord(transtart);
-												newComplexEvent.setId(e1.getId()+"+"+e2.getId()+"+"+e3.getId());
-												newComplexEvent.setRef(e1.getRef());
-												newComplexEvent.setAlt("<TRA>");
-												newComplexEvent.setFilter(e1.getFilter());
-												newComplexEvent.setQual(e1.getQual());
-//												tempInfo = e1.getInfo();
-//												//System.out.println(tempInfo+"\n");
-//												if (tempInfo.contains("SVTYPE")){
-//													tmpOld = tempInfo.substring(tempInfo.indexOf("SVTYPE=")+7, tempInfo.indexOf("SVTYPE=")+10);
-//													tmpNew = newComplexEvent.getAlt();
-//													tempInfo=tempInfo.replace(tmpOld, tmpNew);
-//													tmpOld = tempInfo.substring(tempInfo.indexOf("CHR2=")+5, tempInfo.indexOf(";",tempInfo.indexOf("CHR2=")));
-//													tmpNew = tranend.getChr();
-//													tempInfo=tempInfo.replace(tmpOld, tmpNew);
-//													tmpOld = tempInfo.substring(tempInfo.indexOf(";END=")+5, tempInfo.indexOf(";CT",tempInfo.indexOf(";END=")));
-//													tmpNew = Integer.toString(tranend.getPos());
-//													tempInfo.replace(tmpOld, tmpNew);
-//													newComplexEvent.setInfo(tempInfo);
-//												}
+												newComplexEvent = new ComplexEvent(transtart, tranend, EVENT_TYPE.COMPLEX_TRANSLOCATION, (new Event[] {e1, e2, e3}), true, hostingNode, traninsert);
+
 												double readDepth = (checkRD? getReadDepth(samReader, transtart.getChr(), transtart.getPos(), tranend.getPos()) : -1);
-												//tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+"; CHR2="+tranend.getChr()+"; END="+Integer.toString(tranend.getPos());
+
 												tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+";CHR2="+transtart.getChr()+";START="+Integer.toString(transtart.getPos())+";END="+Integer.toString(tranend.getPos())+";ADP="+readDepth;
 												newComplexEvent.setInfo(tempInfo);
 												newComplexEvent.setCoord(traninsert);
-												//writer.write(newComplexEvent.getC1().getChr()+"\t"+newComplexEvent.getC1().getPos()+"\t"+newComplexEvent.getId()+"\t"+newComplexEvent.getRef()+"\t"+newComplexEvent.getAlt()+"\t"+newComplexEvent.getQual()+"\t"+newComplexEvent.getFilter()+"\t"+newComplexEvent.getInfo()+"\n");
+
 											} else {
 												//area under e3 is translocated
 												GenomicCoordinate transtart, tranend;
@@ -937,34 +869,13 @@ public class Clove {
 													tranend   = e3.getC1();
 												}
 												GenomicCoordinate traninsert = (e2.getNode(true) == currentNode? e2.getC1() : e2.getC2());
-												newComplexEvent = new ComplexEvent(transtart, tranend, EVENT_TYPE.COMPLEX_TRANSLOCATION, (new Event[] {e1, e2, e3}), currentNode, traninsert);
-												newComplexEvent.setCoord(transtart);
-												//newComplexEvent.setId(e1.getId());
-												newComplexEvent.setId(e1.getId()+"+"+e2.getId()+"+"+e3.getId());
-												newComplexEvent.setRef(e1.getRef());
-												newComplexEvent.setAlt("<TRA>");
-												newComplexEvent.setFilter(e1.getFilter());
-												newComplexEvent.setQual(e1.getQual());
-//												tempInfo = e1.getInfo();
-//												//System.out.println(tempInfo+"\n");
-//												if (tempInfo.contains("SVTYPE")){
-//													tmpOld = tempInfo.substring(tempInfo.indexOf("SVTYPE=")+7, tempInfo.indexOf("SVTYPE=")+10);
-//													tmpNew = newComplexEvent.getAlt();
-//													tempInfo=tempInfo.replace(tmpOld, tmpNew);
-//													tmpOld = tempInfo.substring(tempInfo.indexOf("CHR2=")+5, tempInfo.indexOf(";",tempInfo.indexOf("CHR2=")));
-//													tmpNew = tranend.getChr();
-//													tempInfo=tempInfo.replace(tmpOld, tmpNew);
-//													tmpOld = tempInfo.substring(tempInfo.indexOf(";END=")+5, tempInfo.indexOf(";CT",tempInfo.indexOf(";END=")));
-//													tmpNew = Integer.toString(tranend.getPos());
-//													tempInfo.replace(tmpOld, tmpNew);
-//													newComplexEvent.setInfo(tempInfo);
-//												}
+												newComplexEvent = new ComplexEvent(transtart, tranend, EVENT_TYPE.COMPLEX_TRANSLOCATION, (new Event[] {e1, e2, e3}), true, currentNode, traninsert);
+
 												double readDepth = (checkRD? getReadDepth(samReader, transtart.getChr(), transtart.getPos(), tranend.getPos()) : -1);
-												//tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+"; CHR2="+tranend.getChr()+"; END="+Integer.toString(tranend.getPos());
+
 												tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+";CHR2="+transtart.getChr()+";START="+Integer.toString(transtart.getPos())+";END="+Integer.toString(tranend.getPos())+";ADP="+readDepth;
 												newComplexEvent.setInfo(tempInfo);
 												newComplexEvent.setCoord(traninsert);
-												//writer.write(newComplexEvent.getC1().getChr()+"\t"+newComplexEvent.getC1().getPos()+"\t"+newComplexEvent.getId()+"\t"+newComplexEvent.getRef()+"\t"+newComplexEvent.getAlt()+"\t"+newComplexEvent.getQual()+"\t"+newComplexEvent.getFilter()+"\t"+newComplexEvent.getInfo()+"\n");
 											}
 										}
 										else {
@@ -975,67 +886,27 @@ public class Clove {
 												dupstart = (e1.getNode(true) == currentNode? e1.getC2() : e1.getC1());
 												dupend   = (e2.getNode(true) == currentNode? e2.getC2() : e2.getC1());
 												insert   = (e1.getNode(true) == currentNode? e1.getC1() : e1.getC2());
-												newComplexEvent = new ComplexEvent(dupstart, dupend, EVENT_TYPE.COMPLEX_DUPLICATION, (new Event[] {e1, e2}), currentNode, insert);
-												newComplexEvent.setCoord(dupstart);
-												//newComplexEvent.setId(e1.getId());
-												newComplexEvent.setId(e1.getId()+"+"+e2.getId());
-												newComplexEvent.setRef(e1.getRef());
-												newComplexEvent.setAlt("<DUP>");
-												newComplexEvent.setFilter(e1.getFilter());
-												newComplexEvent.setQual(e1.getQual());
-//												tempInfo = e1.getInfo();
-//												//System.out.println(tempInfo+"\n");
-//												if (tempInfo.contains("SVTYPE")){
-//													tmpOld = tempInfo.substring(tempInfo.indexOf("SVTYPE=")+7, tempInfo.indexOf("SVTYPE=")+10);
-//													tmpNew = newComplexEvent.getAlt();
-//													tempInfo=tempInfo.replace(tmpOld, tmpNew);
-//													tmpOld = tempInfo.substring(tempInfo.indexOf("CHR2=")+5, tempInfo.indexOf(";",tempInfo.indexOf("CHR2=")));
-//													tmpNew = dupend.getChr();
-//													tempInfo=tempInfo.replace(tmpOld, tmpNew);
-//													tmpOld = tempInfo.substring(tempInfo.indexOf(";END=")+5, tempInfo.indexOf(";CT",tempInfo.indexOf(";END=")));
-//													tmpNew = Integer.toString(dupend.getPos());
-//													tempInfo.replace(tmpOld, tmpNew);
-//													newComplexEvent.setInfo(tempInfo);
-//												}
+												newComplexEvent = new ComplexEvent(dupstart, dupend, EVENT_TYPE.COMPLEX_DUPLICATION, (new Event[] {e1, e2}), true, currentNode, insert);
+
 												double readDepth = (checkRD? getReadDepth(samReader, dupstart.getChr(), dupstart.getPos(), dupend.getPos()) : -1);
-												//tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+"; CHR2="+dupend.getChr()+"; END="+Integer.toString(dupend.getPos());
+
 												tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+";CHR2="+dupstart.getChr()+";START="+Integer.toString(dupstart.getPos())+";END="+Integer.toString(dupend.getPos())+";ADP="+readDepth;
 												newComplexEvent.setInfo(tempInfo);
 												newComplexEvent.setCoord(insert);
-												//writer.write(newComplexEvent.getC1().getChr()+"\t"+newComplexEvent.getC1().getPos()+"\t"+newComplexEvent.getId()+"\t"+newComplexEvent.getRef()+"\t"+newComplexEvent.getAlt()+"\t"+newComplexEvent.getQual()+"\t"+newComplexEvent.getFilter()+"\t"+newComplexEvent.getInfo()+"\n");
+
 											} else {
-												//duplication upstream of currentNode
+
 												dupstart = (e2.getNode(true) == currentNode? e2.getC2() : e2.getC1());
 												dupend   = (e1.getNode(true) == currentNode? e1.getC2() : e1.getC1());
 												insert   = (e2.getNode(true) == currentNode? e2.getC1() : e2.getC2());
-												newComplexEvent = new ComplexEvent(dupstart, dupend, EVENT_TYPE.COMPLEX_DUPLICATION, (new Event[] {e1, e2}), currentNode, insert);
-												newComplexEvent.setCoord(dupstart);
-												//newComplexEvent.setId(e1.getId());
-												newComplexEvent.setId(e1.getId()+"+"+e2.getId());
-												newComplexEvent.setRef(e1.getRef());
-												newComplexEvent.setAlt("<DUP>");
-												newComplexEvent.setFilter(e1.getFilter());
-												newComplexEvent.setQual(e1.getQual());
-//												tempInfo = e1.getInfo();
-//												//System.out.println(tempInfo+"\n");
-//												if (tempInfo.contains("SVTYPE")){
-//													tmpOld = tempInfo.substring(tempInfo.indexOf("SVTYPE=")+7, tempInfo.indexOf("SVTYPE=")+10);
-//													tmpNew = newComplexEvent.getAlt();
-//													tempInfo=tempInfo.replace(tmpOld, tmpNew);
-//													tmpOld = tempInfo.substring(tempInfo.indexOf("CHR2=")+5, tempInfo.indexOf(";",tempInfo.indexOf("CHR2=")));
-//													tmpNew = dupend.getChr();
-//													tempInfo=tempInfo.replace(tmpOld, tmpNew);
-//													tmpOld = tempInfo.substring(tempInfo.indexOf(";END=")+5, tempInfo.indexOf(";CT",tempInfo.indexOf(";END=")));
-//													tmpNew = Integer.toString(dupend.getPos());
-//													tempInfo.replace(tmpOld, tmpNew);
-//													newComplexEvent.setInfo(tempInfo);
-//												}
+												newComplexEvent = new ComplexEvent(dupstart, dupend, EVENT_TYPE.COMPLEX_DUPLICATION, (new Event[] {e1, e2}), true, currentNode, insert);
+//
 												double readDepth = (checkRD? getReadDepth(samReader, dupstart.getChr(), dupstart.getPos(), dupend.getPos()) : -1);
-												//tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+"; CHR2="+dupend.getChr()+"; END="+Integer.toString(dupend.getPos());
+
 												tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+";CHR2="+dupstart.getChr()+";START="+Integer.toString(dupstart.getPos())+";END="+Integer.toString(dupend.getPos())+";ADP="+readDepth;
 												newComplexEvent.setInfo(tempInfo);
 												newComplexEvent.setCoord(insert);
-												//writer.write(newComplexEvent.getC1().getChr()+"\t"+newComplexEvent.getC1().getPos()+"\t"+newComplexEvent.getId()+"\t"+newComplexEvent.getRef()+"\t"+newComplexEvent.getAlt()+"\t"+newComplexEvent.getQual()+"\t"+newComplexEvent.getFilter()+"\t"+newComplexEvent.getInfo()+"\n");
+
 											}
 
 										}
@@ -1065,61 +936,19 @@ public class Clove {
 									}
 									Event e3 = other1.existsDeletionEventTo(other2);
 									if(e3 != null){
-										newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_TRANSLOCATION, new Event[] {e1, e2, e3}, currentNode, eventInsert);
-										newComplexEvent.setCoord(eventStart);
-										//newComplexEvent.setId(e1.getId());
-										newComplexEvent.setId(e1.getId()+"+"+e2.getId()+"+"+e3.getId());
-										newComplexEvent.setRef(e1.getRef());
-										newComplexEvent.setAlt("<CIT>");
-										newComplexEvent.setFilter(e1.getFilter());
-										newComplexEvent.setQual(e1.getQual());
-//										tempInfo = e1.getInfo();
-//										//System.out.println(tempInfo+"\n");
-//										if (tempInfo.contains("SVTYPE")){
-//											tmpOld = tempInfo.substring(tempInfo.indexOf("SVTYPE=")+7, tempInfo.indexOf("SVTYPE=")+10);
-//											tmpNew = newComplexEvent.getAlt();
-//											tempInfo=tempInfo.replace(tmpOld, tmpNew);
-//											tmpOld = tempInfo.substring(tempInfo.indexOf("CHR2=")+5, tempInfo.indexOf(";",tempInfo.indexOf("CHR2=")));
-//											tmpNew = eventEnd.getChr();
-//											tempInfo=tempInfo.replace(tmpOld, tmpNew);
-//											tmpOld = tempInfo.substring(tempInfo.indexOf(";END=")+5, tempInfo.indexOf(";CT",tempInfo.indexOf(";END=")));
-//											tmpNew = Integer.toString(eventEnd.getPos());
-//											tempInfo.replace(tmpOld, tmpNew);
-//											newComplexEvent.setInfo(tempInfo);
-//										}
+										newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_TRANSLOCATION, new Event[] {e1, e2, e3}, true, currentNode, eventInsert);
+
 										double readDepth = (checkRD? getReadDepth(samReader, eventStart.getChr(), eventStart.getPos(), eventEnd.getPos()) : -1);
 										tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+"; CHR2="+eventStart.getChr()+"; START="+Integer.toString(eventStart.getPos())+"; END="+Integer.toString(eventEnd.getPos())+";ADP="+readDepth;
 										newComplexEvent.setInfo(tempInfo);
 										newComplexEvent.setCoord(eventInsert);
-										//writer.write(newComplexEvent.getC1().getChr()+"\t"+newComplexEvent.getC1().getPos()+"\t"+newComplexEvent.getId()+"\t"+newComplexEvent.getRef()+"\t"+newComplexEvent.getAlt()+"\t"+newComplexEvent.getQual()+"\t"+newComplexEvent.getFilter()+"\t"+newComplexEvent.getInfo()+"\n");
 									} else {
-										newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_DUPLICATION, new Event[] {e1, e2}, currentNode, eventInsert);
-										newComplexEvent.setCoord(eventStart);
-										//newComplexEvent.setId(e1.getId());
-										newComplexEvent.setId(e1.getId()+"+"+e2.getId());
-										newComplexEvent.setRef(e1.getRef());
-										newComplexEvent.setAlt("<CID>");
-										newComplexEvent.setFilter(e1.getFilter());
-										newComplexEvent.setQual(e1.getQual());
-//										tempInfo = e1.getInfo();
-//										//System.out.println(tempInfo+"\n");
-//										if (tempInfo.contains("SVTYPE")){
-//											tmpOld = tempInfo.substring(tempInfo.indexOf("SVTYPE=")+7, tempInfo.indexOf("SVTYPE=")+10);
-//											tmpNew = newComplexEvent.getAlt();
-//											tempInfo=tempInfo.replace(tmpOld, tmpNew);
-//											tmpOld = tempInfo.substring(tempInfo.indexOf("CHR2=")+5, tempInfo.indexOf(";",tempInfo.indexOf("CHR2=")));
-//											tmpNew = eventEnd.getChr();
-//											tempInfo=tempInfo.replace(tmpOld, tmpNew);
-//											tmpOld = tempInfo.substring(tempInfo.indexOf(";END=")+5, tempInfo.indexOf(";CT",tempInfo.indexOf(";END=")));
-//											tmpNew = Integer.toString(eventEnd.getPos());
-//											tempInfo.replace(tmpOld, tmpNew);
-//											newComplexEvent.setInfo(tempInfo);
-//										}
+										newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_DUPLICATION, new Event[] {e1, e2}, true, currentNode, eventInsert);
+
 										double readDepth = (checkRD? getReadDepth(samReader, eventStart.getChr(), eventStart.getPos(), eventEnd.getPos()) : -1);
 										tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+";CHR2="+eventStart.getChr()+";START="+Integer.toString(eventStart.getPos())+";END="+Integer.toString(eventEnd.getPos())+";ADP="+readDepth;
 										newComplexEvent.setInfo(tempInfo);
 										newComplexEvent.setCoord(eventInsert);
-										//writer.write(newComplexEvent.getC1().getChr()+"\t"+newComplexEvent.getC1().getPos()+"\t"+newComplexEvent.getId()+"\t"+newComplexEvent.getRef()+"\t"+newComplexEvent.getAlt()+"\t"+newComplexEvent.getQual()+"\t"+newComplexEvent.getFilter()+"\t"+newComplexEvent.getInfo()+"\n");
 									}
 								}
 								break;
@@ -1136,43 +965,23 @@ public class Clove {
 										}
 										Event e3 = other1.existsDeletionEventTo(other2);
 										if(e3 != null){
-											newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_INVERTED_TRANSLOCATION, new Event[] {e1, e2, e3}, currentNode, eventInsert);
-											newComplexEvent.setCoord(eventStart);
-											//newComplexEvent.setId(e1.getId());
-											newComplexEvent.setId(e1.getId()+"+"+e2.getId()+"+"+e3.getId());
-											newComplexEvent.setRef(e1.getRef());
-											newComplexEvent.setAlt("<IVT>");
-											newComplexEvent.setFilter(e1.getFilter());
-											newComplexEvent.setQual(e1.getQual());
-//										tempInfo = e1.getInfo();
-//										//System.out.println(tempInfo+"\n");
-//										if (tempInfo.contains("SVTYPE")){
-//											tmpOld = tempInfo.substring(tempInfo.indexOf("SVTYPE=")+7, tempInfo.indexOf("SVTYPE=")+10);
-//											tmpNew = newComplexEvent.getAlt();
-//											tempInfo=tempInfo.replace(tmpOld, tmpNew);
-//											tmpOld = tempInfo.substring(tempInfo.indexOf("CHR2=")+5, tempInfo.indexOf(";",tempInfo.indexOf("CHR2=")));
-//											tmpNew = eventEnd.getChr();
-//											tempInfo=tempInfo.replace(tmpOld, tmpNew);
-//											tmpOld = tempInfo.substring(tempInfo.indexOf(";END=")+5, tempInfo.indexOf(";CT",tempInfo.indexOf(";END=")));
-//											tmpNew = Integer.toString(eventEnd.getPos());
-//											tempInfo.replace(tmpOld, tmpNew);
-//											newComplexEvent.setInfo(tempInfo);
-//										}
+											newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_INVERTED_TRANSLOCATION, new Event[] {e1, e2, e3}, true, currentNode, eventInsert);
+
 											double readDepth = (checkRD? getReadDepth(samReader, eventStart.getChr(), eventStart.getPos(), eventEnd.getPos()) : -1);
 											tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+";CHR2="+eventStart.getChr()+";START="+Integer.toString(eventStart.getPos())+";END="+Integer.toString(eventEnd.getPos())+";ADP="+readDepth;
 											newComplexEvent.setInfo(tempInfo);
 											newComplexEvent.setCoord(eventInsert);
-											//writer.write(newComplexEvent.getC1().getChr()+"\t"+newComplexEvent.getC1().getPos()+"\t"+newComplexEvent.getId()+"\t"+newComplexEvent.getRef()+"\t"+newComplexEvent.getAlt()+"\t"+newComplexEvent.getQual()+"\t"+newComplexEvent.getFilter()+"\t"+newComplexEvent.getInfo()+"\n");
+
 										} else {
-											newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_INVERTED_DUPLICATION, new Event[] {e1, e2}, currentNode, eventInsert);
-											newComplexEvent.setCoord(eventStart);//
-											//newComplexEvent.setId(e1.getId());
-											newComplexEvent.setId(e1.getId()+"+"+e2.getId());
-											newComplexEvent.setRef(e1.getRef());
-											newComplexEvent.setAlt("<IVD>");
-											newComplexEvent.setFilter(e1.getFilter());
-											newComplexEvent.setQual(e1.getQual());
-											tempInfo = e1.getInfo();
+											newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_INVERTED_DUPLICATION, new Event[] {e1, e2}, true, currentNode, eventInsert);
+//											newComplexEvent.setCoord(eventStart);//
+//											//newComplexEvent.setId(e1.getId());
+//											newComplexEvent.setId(e1.getId()+"+"+e2.getId());
+//											newComplexEvent.setRef(e1.getRef());
+//											//newComplexEvent.setAlt("<IVD>");
+//											newComplexEvent.setFilter(e1.getFilter());
+//											newComplexEvent.setQual(e1.getQual());
+											//tempInfo = e1.getInfo();
 											//System.out.println(tempInfo+"\n");
 //										if (tempInfo.contains("SVTYPE")){
 //											tmpOld = tempInfo.substring(tempInfo.indexOf("SVTYPE=")+7, tempInfo.indexOf("SVTYPE=")+10);
@@ -1185,7 +994,10 @@ public class Clove {
 //											tmpNew = Integer.toString(eventEnd.getPos());
 //											tempInfo.replace(tmpOld, tmpNew);
 //											newComplexEvent.setInfo(tempInfo);
+
+
 //										}
+
 											double readDepth = (checkRD? getReadDepth(samReader, eventStart.getChr(), eventStart.getPos(), eventEnd.getPos()) : -1);
 											tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+";CHR2="+eventStart.getChr()+";START="+Integer.toString(eventStart.getPos())+";END="+Integer.toString(eventEnd.getPos())+";ADP="+readDepth;
 											newComplexEvent.setInfo(tempInfo);
@@ -1197,8 +1009,51 @@ public class Clove {
 								break;
 							}
 							case BE1: {
-								if(e2.getType() == EVENT_TYPE.BE2){
+								if(e2.getType() == EVENT_TYPE.BE2 || e2.getType() == EVENT_TYPE.ITX2 || e2.getType() == EVENT_TYPE.INVTX2 ){
 
+									GenomicCoordinate eventStart, eventEnd, eventInsert;
+
+									if (e2.getType() == EVENT_TYPE.BE2) {
+										eventStart = (e1.getNode(true)==currentNode?e1.getC1():e1.getC2());
+										eventEnd = (e2.getNode(true)==currentNode?e2.getC1():e2.getC2());
+										eventInsert = (e1.getNode(true)==currentNode?e1.getC1():e1.getC2());
+									} else {
+										eventStart = (e1.getNode(true)==currentNode?e1.getC1():e1.getC2());
+										eventEnd = (e2.getNode(true)==currentNode? e2.getC1() : e2.getC2());
+										eventInsert = (e2.getNode(true)==currentNode? e2.getC2() : e2.getC1());
+									}
+
+
+									newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_BIG_INSERTION, (new Event[] {e1, e2}), true, currentNode, eventInsert);
+
+									double readDepth = (checkRD? getReadDepth(samReader, eventStart.getChr(), eventStart.getPos(), eventEnd.getPos()) : -1);
+
+									tempInfo="SVTYPE="+newComplexEvent.getAlt().substring(1, 4)+";CHR2="+eventEnd.getChr()+";END="+Integer.toString(eventEnd.getPos())+";ADP="+readDepth;
+									newComplexEvent.setInfo(tempInfo);
+								}
+							}
+							case BE2: {
+								if(e2.getType() == EVENT_TYPE.BE1 || e2.getType() == EVENT_TYPE.ITX1 || e2.getType() == EVENT_TYPE.INVTX1 ) {
+
+									GenomicCoordinate eventStart, eventEnd, eventInsert;
+
+									if (e2.getType() == EVENT_TYPE.BE1) {
+										eventStart = (e2.getNode(true)==currentNode?e2.getC1():e2.getC2());
+										eventEnd = (e1.getNode(true)==currentNode?e1.getC1():e1.getC2());
+										eventInsert = (e2.getNode(true)==currentNode?e2.getC1():e2.getC2());
+									} else {
+										eventStart = (e2.getNode(true)==currentNode?e2.getC1():e2.getC2());
+										eventEnd = (e1.getNode(true)==currentNode?e1.getC1():e1.getC2());
+										eventInsert = (e2.getNode(true)==currentNode?e2.getC2():e2.getC1());
+									}
+
+
+									newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_BIG_INSERTION, (new Event[]{e1, e2}), true, currentNode, eventInsert);
+
+									double readDepth = (checkRD ? getReadDepth(samReader, eventStart.getChr(), eventStart.getPos(), eventEnd.getPos()) : -1);
+
+									tempInfo = "SVTYPE=" + newComplexEvent.getAlt().substring(1, 4) + ";CHR2=" + eventEnd.getChr() + ";END=" + Integer.toString(eventEnd.getPos()) + ";ADP=" + readDepth;
+									newComplexEvent.setInfo(tempInfo);
 								}
 							}
 
@@ -1207,11 +1062,14 @@ public class Clove {
 						//check if a new complex event has been generated
 						if(newComplexEvent != null){
 							//-> add events to cleanup and break current loop
+
 							newComplexEvents.add(newComplexEvent);
 							for(Event e: newComplexEvent.getEventsInvolvedInComplexEvent()){
 								removeEvents.add(e);
 							}
 							newComplexEvent = null;
+
+							//TODO: Question this decision, Probably some kind of grading by quality measure would be more appropriate
 							break; //break the for-j loop, as this guy is already paired
 						}
 					}
@@ -1231,94 +1089,93 @@ public class Clove {
 		//while we're at it: let's run through the nodes again!
 		//this time for output
 		int totalEvents = 0;
-		for(Entry<String, TreeSet<GenomicNode>> tableEntry: genomicNodes.entrySet()) {
+		for (Entry<String, TreeSet<GenomicNode>> tableEntry : genomicNodes.entrySet()) {
 			//System.out.println("Working on Entry: "+tableEntry.toString());
-			for(GenomicNode currentNode: tableEntry.getValue()){
-				if(currentNode.getEvents().size() > 1){
+			for (GenomicNode currentNode : tableEntry.getValue()) {
+				if (currentNode.getEvents().size() > 1) {
 //					System.out.println("Node might be shifty: "+currentNode.getEvents().size()+" members!");
 //					System.out.println(currentNode.getEvents().get(0)+"  "+currentNode.getEvents().get(1));
 				}
 				totalEvents += currentNode.getEvents().size();
 				HashSet<Event> skipEvents = new HashSet<Event>(), deleteEvents = new HashSet<Event>(), newEvents = new HashSet<Event>();
-				for(Event e: currentNode.getEvents()){
-					if(skipEvents.contains(e))
+				for (Event e : currentNode.getEvents()) {
+					if (skipEvents.contains(e))
 						continue;
 					//if(currentNode.getEvents().size() < 2 && e instanceof ComplexEvent ){//&& e.otherNode(currentNode) != currentNode){// (e.getType() == EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_DUPLICATION || e.getType()==EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_TRANSLOCATION)){
 					e.processAdditionalInformation(); //TODO: this is a bit of a sly hack to classify insertions in Socrates... not sure how to do it more transparently.
-					switch(e.getType()) {
+					switch (e.getType()) {
+						// handles all Inversions
 						case INV1:
 						case INV2:
-							skipEvents.add(e);
-							//deleteEvents.add(e);
-							if(classifySimpleInversion) {
-								ComplexEvent e2 = new ComplexEvent(e.getC1(), e.getC2(), EVENT_TYPE.COMPLEX_INVERSION, new Event[] {e}, currentNode);
+
+							if (classifySimpleInversion) {
+								skipEvents.add(e);
+								ComplexEvent e2 = new ComplexEvent(e.getC1(), e.getC2(), EVENT_TYPE.COMPLEX_INVERSION, new Event[]{e}, true, currentNode);
 								e = e2;
-								newEvents.add(e2);
-								e2.setId(e2.getId());
-								e2.setRef(e2.getRef());
-								e2.setAlt("<INV>");
-								e2.setFilter(e2.getFilter());
-								e2.setQual(e2.getQual());
-								e2.setInfo(e2.getInfo());
-							}
-							else {
-								e.setAlt("<INV>");
-								e.setFailFilter();
+
+							} else {
+								//e.setAlt("<INV>");
+								e.addFilter("SINGLE_INV");
 							}
 							break;
 						case DEL:
 							//check for deletion
-							//double readDepth = meanReadDepth(reader, e.getC1().getPos()+1, e.getC2().getPos()-1);
-							double readDepth = (checkRD? getReadDepth(samReader, e.getC1().getChr(), e.getC1().getPos()+1, e.getC2().getPos()-1) : -1);
+
+							double readDepth = (checkRD ? getReadDepth(samReader, e.getC1().getChr(), e.getC1().getPos() + 1, e.getC2().getPos() - 1) : -1);
 							skipEvents.add(e);
-							if(readDepth < 0 || readDepth > mean-interval){
-								//deleteEvents.add(e);
-								e.setFailFilter();
-							} else {
-								//System.out.print("read depth for event: "+readDepth+"\t");
+
+							//TODO: Recheck how the read depth is checked. Should we also check the read depth before and after the event?
+							if (readDepth < 0 || readDepth > mean - interval) {
+								// deleteEvents.add(e);
+								e.addFilter("RD_FAIL");
 							}
-							e.setAlt("<DEL>");
-							e.setInfo(e.getInfo()+";ADP="+readDepth );
+//							else {
+//								// System.out.print("read depth for DEL event: "+ readDepth+"\t");
+//							}
+
+							e.setAlt(getAltVCF(EVENT_TYPE.DEL));
+							e.setInfo(e.getInfo() + ";ADP=" + readDepth);
 							break;
 						case TAN:
-							//double readDepth = meanReadDepth(reader, e.getC1().getPos()+1, e.getC2().getPos()-1);
-							readDepth = (checkRD? getReadDepth(samReader, e.getC1().getChr(), e.getC1().getPos(), e.getC2().getPos()) : -1);
+							readDepth = (checkRD ? getReadDepth(samReader, e.getC1().getChr(), e.getC1().getPos(), e.getC2().getPos()) : -1);
 							skipEvents.add(e);
-//							//double flank = (meanReadDepth(reader, e.getC1().getPos()-200, e.getC1().getPos()) + meanReadDepth(reader, e.getC2().getPos(), e.getC2().getPos()+200))/2;
-							if( readDepth < 0 || readDepth < mean+interval){
-								//System.out.println("\t\t\t\t\t\tNot proper duplication!!");
-								//deleteEvents.add(e);
-								e.setFailFilter();
+
+							if (readDepth < 0 || readDepth < mean + interval) {
+								e.addFilter("RD_FAIL");
 							} else {
-								//System.out.print("read depth for event: "+readDepth+"\t");
+								// System.out.print("read depth for TAN event: "+readDepth+"\t");
 							}
 							e.setAlt("<TAN>");
-							e.setInfo(e.getInfo()+";ADP="+readDepth );
+							e.setInfo(e.getInfo() + ";ADP=" + readDepth);
 							break;
+
+						// handles all duplications
 						case COMPLEX_DUPLICATION:
 						case COMPLEX_INVERTED_DUPLICATION:
 						case COMPLEX_INTERCHROMOSOMAL_DUPLICATION:
 						case COMPLEX_INTERCHROMOSOMAL_INVERTED_DUPLICATION:
-							if(e.getC2().getPos() - e.getC1().getPos() < 50){
-								//too small for RD check
-								break;
+
+							//TODO: Why would intervals of < 50 be too small for read depth check?
+							if (e.getC2().getPos() - e.getC1().getPos() > 50) {
+
+								readDepth = getReadDepth(samReader, e.getC1().getChr(), e.getC1().getPos(), e.getC2().getPos());
+								if (readDepth < mean + interval) { ;
+									e.addFilter("RD_FAIL");
+								}
 							}
-//							readDepth = getReadDepth(samReader, e.getC1().getChr(), e.getC1().getPos(), e.getC2().getPos());
-//							if(readDepth < mean+interval){
-//								deleteEvents.add(e);
-//								skipEvents.add(e);
-//								continue;
-//							} else {
-//								System.out.print("read depth for event: "+readDepth+"\t");
-//							}
+
 							break;
+
+						// handles all interchromosmal events
 						case ITX1:
 						case ITX2:
 						case INVTX1:
 						case INVTX2:
-							e.setFailFilter();
-							e.setAlt(Event.altVCF(e.getType()));
-							skipEvents.add(e);
+							e.addFilter("SINGLE_ITX");
+							e.setAlt(getAltVCF(e.getType()));
+//							skipEvents.add(e);
+							break;
+						default:
 							break;
 					}
 

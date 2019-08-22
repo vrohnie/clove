@@ -5,8 +5,10 @@ public class ComplexEvent extends Event{
 
 	private Event[] eventsInvolvedInComplexEvent;
 	private GenomicCoordinate insertionPoint;
+
+
 	public ComplexEvent(GenomicCoordinate c1, GenomicCoordinate c2,
-			EVENT_TYPE type, Event[] involvedEvents, GenomicNode hostingNode) {
+			EVENT_TYPE type, Event[] involvedEvents, Boolean addition, GenomicNode hostingNode) {
 		super(c1, c2, type);
 		this.eventsInvolvedInComplexEvent = involvedEvents;
 		super.setNode(hostingNode, true);
@@ -19,11 +21,33 @@ public class ComplexEvent extends Event{
 			super.addCaller(e.getCalledBy());
 			super.increaseCalls(e.getCalledTimes());
 		}
+
+		this.setCoord(c1);
+		this.setAlt(getAltVCF(type));
+
+		String id = "";
+		Double qual = 0.0;
+
+		for(Event e: involvedEvents){
+			id = id + e.getId() + (addition?"+":"-");
+			qual += Double.parseDouble(e.getQual());
+		}
+
+		id = id.substring(0, id.length() - 1);
+		qual = qual/involvedEvents.length;
+
+		this.setId(id);
+		this.setRef(involvedEvents[0].getRef());
+		this.setFilter(involvedEvents[0].getFilter());
+		this.setQual(String.format( "%.2f", qual ));
 	}
+
+
 	public ComplexEvent(GenomicCoordinate c1, GenomicCoordinate c2,
-			EVENT_TYPE type, Event[] involvedEvents, GenomicNode hostingNode, GenomicCoordinate insertionPoint) {
-		this(c1,c2,type,involvedEvents,hostingNode);
+			EVENT_TYPE type, Event[] involvedEvents, Boolean addition , GenomicNode hostingNode, GenomicCoordinate insertionPoint) {
+		this(c1,c2,type,involvedEvents, addition, hostingNode);
 		this.insertionPoint = insertionPoint;
+
 //		String[] ids = new String[involvedEvents.length];
 //		for (int i=0; i<ids.length;i++){ ids[i] = involvedEvents[i].getId();}
 //		String newId = String.join("+", ids) ;
