@@ -599,10 +599,18 @@ public class Event {
 
     public static Event createNewEventFromGRIDSSOutput(String output) {
 
+    	//System.out.println(output);
+
         Pattern pattern;
         Matcher matcher;
 
         String[] bits = output.split("\t");
+
+//        if(bits.length != 7){
+//        	System.err.println("Corrupted VCF File");
+//        	System.exit(1 );
+//        	return null;
+//		}
 
         String chr1 = bits[0], chr2 = "";
         String orientation1 = "", orientation2 = "";
@@ -860,7 +868,8 @@ public class Event {
 		if(myNodes[1] == node) {
 			return myNodes[0];
 		}
-		System.err.println("otherNode: query node is not assiciated with Event!");
+		System.err.println("otherNode: query node is not associated with Event!");
+		System.out.println(this.toString());
 		return null;
 	}
 	
@@ -999,10 +1008,10 @@ public class Event {
 	}
 	
 	public void addFilter( String filter){
-    	if(this.getFilter() == "PASS"){
-			this.filter = filter;
+    	if(this.getFilter().equals("PASS")){
+			this.setFilter(filter);
 		} else {
-    		this.filter = this.getFilter() + ";" + filter;
+    		this.setFilter(this.getFilter() + ";" + filter);
 		}
 	}
 }

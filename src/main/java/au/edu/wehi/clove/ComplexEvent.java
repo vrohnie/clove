@@ -1,6 +1,10 @@
 package au.edu.wehi.clove;
 
 
+import java.util.Arrays;
+import java.util.LinkedHashSet;
+import java.util.Set;
+
 public class ComplexEvent extends Event{
 
 	private Event[] eventsInvolvedInComplexEvent;
@@ -27,21 +31,24 @@ public class ComplexEvent extends Event{
 
 		String id = "";
 		Double qual = 0.0;
+		Set<String> filterSet = new LinkedHashSet<>();
 
 		for(Event e: involvedEvents){
 			id = id + e.getId() + (addition?"+":"-");
 			qual += Double.parseDouble(e.getQual());
+			String[] curfilters = e.getFilter().split(";");
+			filterSet.addAll(Arrays.asList(curfilters));
 		}
 
 		id = id.substring(0, id.length() - 1);
 		qual = qual/involvedEvents.length;
+		String filter = String.join(";", filterSet);
 
 		this.setId(id);
 		this.setRef(involvedEvents[0].getRef());
-		this.setFilter(involvedEvents[0].getFilter());
+		this.setFilter(filter);
 		this.setQual(String.format( "%.2f", qual ));
 	}
-
 
 	public ComplexEvent(GenomicCoordinate c1, GenomicCoordinate c2,
 			EVENT_TYPE type, Event[] involvedEvents, Boolean addition , GenomicNode hostingNode, GenomicCoordinate insertionPoint) {

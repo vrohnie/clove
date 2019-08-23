@@ -56,8 +56,13 @@ public class GenomicNode implements Comparable<GenomicNode>{
 	 * Assumes that the other node is downstream of this (on same chr)
 	 * Also assumes that other node has only one event
 	 */
+
+	//TODO: Why would we only merge nodes with event size 1 ?
+	//Lets try 2 lateron
 	public void mergeWithNode(GenomicNode other){
-		if(!this.start.onSameChromosome(other.start) || this.end.compareTo(other.start) >0 || other.events.size()>1){
+
+		if(!this.start.onSameChromosome(other.start) || this.end.compareTo(other.start) >0 || other.getEvents().size()>1){
+			System.out.println("Event size : " + other.getEvents().size());
 			System.err.println("Assumptions violated in mergeWithNode!");
 		}
 		//change end coordinate of node interval
@@ -82,29 +87,37 @@ public class GenomicNode implements Comparable<GenomicNode>{
 	}
 
 	public void checkForRedundantEvents(int maxDistanceForNodes){
-		Event e1, e2;
+		Event e1=null, e2=null;
 		HashSet<Event> redundantEvents = new HashSet<Event>();
-		for(int i=0; i<events.size(); i++){
-			e1 = events.get(i);
-			if(redundantEvents.contains(e1)) continue;
-			for(int j=i+1; j< events.size(); j++){
-				e2=events.get(j);
-				if(redundantEvents.contains(e2)) continue;
-				if(e1.otherNode(this).getStart().distanceTo(e2.otherNode(this).getStart()) < maxDistanceForNodes && e1.getType() == e2.getType()) {
-				//if(Event.sameNodeSets(e1,e2) && e1.getType() == e2.getType()){
-					//System.out.println("Redundant events identified: "+e1+" "+e2);
-					e1.setId(e1.getId()+"-"+e2.getId());
-					e1.addCaller(e2.getCalledBy());
-					e1.increaseCalls(e2.getCalledTimes());
-					redundantEvents.add(e2);
-					global_event_merge_counter++;
+
+		try {
+			for (int i = 0; i < this.getEvents().size(); i++) {
+				e1 = this.getEvents().get(i);
+				if (redundantEvents.contains(e1)) continue;
+				for (int j = i + 1; j < events.size(); j++) {
+					e2 = events.get(j);
+
+					if (redundantEvents.contains(e2)) continue;
+					if (e1.otherNode(this).getStart().distanceTo(e2.otherNode(this).getStart()) < maxDistanceForNodes && e1.getType() == e2.getType()) {
+						//if(Event.sameNodeSets(e1,e2) && e1.getType() == e2.getType()){
+						//System.out.println("Redundant events identified: "+e1+" "+e2);
+						e1.setId(e1.getId() + "-" + e2.getId());
+						e1.addCaller(e2.getCalledBy());
+						e1.increaseCalls(e2.getCalledTimes());
+						redundantEvents.add(e2);
+						global_event_merge_counter++;
+					}
 				}
 			}
+			for (Event e : redundantEvents) {
+				e.otherNode(this).getEvents().remove(e);
+			}
+			this.events.removeAll(redundantEvents);
+
+		} catch (Exception e){
+			System.out.print(e1.toString() + e2.toString());
+			System.exit(666);
 		}
-		for(Event e: redundantEvents){
-			e.otherNode(this).getEvents().remove(e);
-		}
-		this.events.removeAll(redundantEvents);
 	}
 	
 	public Event existsDeletionEventTo(GenomicNode other){
