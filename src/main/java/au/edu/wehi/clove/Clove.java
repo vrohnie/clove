@@ -95,11 +95,13 @@ public class Clove {
 		int sc_start = s.getAlignmentStart() - s.getUnclippedStart();
 		return sc_start;
 	}
+
 	private static int softclipLength3prime(SAMRecord s){
 		int sc_end = s.getUnclippedEnd() - s.getAlignmentEnd();
 		return sc_end;
 	}
-	private static boolean isInteresingSoftclip(SAMRecord s, int start, int end, String orientation){
+
+	private static boolean isInterestingSoftclip(SAMRecord s, int start, int end, String orientation){
 		if(orientation.equals("+") && s.getAlignmentEnd() <= end + 2 && softclipLength5prime(s) > 4){
 			return true;
 		}
@@ -110,11 +112,13 @@ public class Clove {
 //			return true;
 		return false;
 	}
+
 	private static boolean isAlignedAcrossBreakpoint(SAMRecord s, int breakpointPosition){
 		if(s.getAlignmentStart() < breakpointPosition-5 && s.getAlignmentEnd() > breakpointPosition+5 && s.getAlignmentStart() - s.getUnclippedStart() < 10 && s.getUnclippedEnd() - s.getAlignmentEnd() < 10)
 			return true;
 		return false;
 	}
+
 	private static double fetchStuff(
 			String chr, int start, int end, String orientation,  SamReader bamFile) {
 
@@ -126,7 +130,7 @@ public class Clove {
 
 		for(SAMRecord s; iter.hasNext();){
 			s = iter.next();
-			if(isInteresingSoftclip(s, start, end, orientation)){
+			if(isInterestingSoftclip(s, start, end, orientation)){
 				softclipped ++;
 			} else if (isAlignedAcrossBreakpoint(s, breakpointPosition)){
 				properAlignment++;
@@ -136,24 +140,54 @@ public class Clove {
 		return (double)softclipped/(softclipped+properAlignment);
 	}
 
-	private static void addEventToNodeList(Event e, Hashtable<String, TreeSet<GenomicNode>> genomicNodes, boolean useFirstCoordinate){
-		GenomicCoordinate coordinate = (useFirstCoordinate? e.getC1() : e.getC2());
-		TreeSet<GenomicNode> nodeSet;
-		if(! genomicNodes.containsKey(coordinate.getChr())){
-			nodeSet = new TreeSet<GenomicNode>();
-			genomicNodes.put(coordinate.getChr(), nodeSet);
-		} else {
-			nodeSet = genomicNodes.get(coordinate.getChr()) ;
-		}
-		GenomicNode newNode = new GenomicNode(coordinate, e);
-		e.setNode(newNode, useFirstCoordinate);
-		nodeSet.add(newNode);
+	static void mergeNodes( Hashtable<String, TreeSet<GenomicNode>> genomicNodes, Integer maxDistanceForNodeMerge, Boolean checkRedundantEvents ){
 
+		for(Entry<String, TreeSet<GenomicNode>> tableEntry: genomicNodes.entrySet()) {
+			int nodesMerged = 0;
+			GenomicNode[] staticList = new GenomicNode[tableEntry.getValue().size()];
+			tableEntry.getValue().toArray(staticList);
+			if(staticList.length == 0)
+				break;
+			GenomicNode lastNode = staticList[0], currentNode = null;
+			for(int i = 1; i < staticList.length; i++){
+				currentNode = staticList[i];
+				if(currentNode.getStart().distanceTo(lastNode.getEnd()) < maxDistanceForNodeMerge){
+
+					lastNode.mergeWithNode(currentNode);
+					if(!tableEntry.getValue().remove(currentNode))
+						System.out.println("NO CAN DO");
+					nodesMerged++;
+				} else {
+					lastNode.checkForRedundantEvents(maxDistanceForNodeMerge);
+					lastNode = currentNode;
+				}
+			}
+			if(checkRedundantEvents)
+				lastNode.checkForRedundantEvents(maxDistanceForNodeMerge);
+			System.out.println("Nodes merged in second run: "+nodesMerged);
+		}
+	}
+
+	private static void addEventToNodeList(Event e, Hashtable<String, TreeSet<GenomicNode>> genomicNodes, boolean useFirstCoordinate){
+		GenomicCoordinate coordinate = (useFirstCoordinate ? e.getC1() : e.getC2());
+		//if (coordinate.getPos() != -1 && !coordinate.getChr().isEmpty()) {
+			TreeSet<GenomicNode> nodeSet;
+			if (!genomicNodes.containsKey(coordinate.getChr())) {
+				nodeSet = new TreeSet<GenomicNode>();
+				genomicNodes.put(coordinate.getChr(), nodeSet);
+			} else {
+				nodeSet = genomicNodes.get(coordinate.getChr());
+			}
+			GenomicNode newNode = new GenomicNode(coordinate, e);
+			e.setNode(newNode, useFirstCoordinate);
+			nodeSet.add(newNode);
+		//}
 	}
 
 	private static String generateNodeLabel(GenomicNode n){
 		return n.getStart().getChr()+"_"+n.getStart().getPos()+"_"+n.getEnd().getPos();
 	}
+
 	private static void graphVisualisation(String outputFilename, Hashtable<String, TreeSet<GenomicNode>> genomicNodes) throws IOException{
 		HashSet<Event> eventsWritten = new HashSet<Event>();
 		FileWriter output = new FileWriter(outputFilename);
@@ -417,7 +451,7 @@ public class Clove {
 						continue;
 					Integer i = eventCounts.get(e.getType()) + 1;
 					eventCounts.put(e.getType(), i);
-					if(e.otherNode(n) == n){
+					if(e.otherNodes(n).get(0) == n){
 						selfRef++;
 					} else
 						skipEvents.add(e);
@@ -708,8 +742,9 @@ public class Clove {
 			addEventToNodeList(e, genomicNodes, false);
 		}
 
-		//establish distance for "close" events according to algorithm
-		int maxDistanceForNodeMerge = 15;
+//		establish distance for "close" events according to algorithm
+
+//		int maxDistanceForNodeMerge = 15;
 //		switch(algorithm){
 //		case SOCRATES: 	maxDistanceForNodeMerge = 15; break;
 //		case DELLY:		maxDistanceForNodeMerge = 100; break;
@@ -717,42 +752,16 @@ public class Clove {
 //		case GUSTAF:	maxDistanceForNodeMerge = 15; break;
 //		default:		System.err.println("Node merge distance set to 0!");
 //		}
+
+
 		//static parameter to classify single inversions as FP or TP
 		final boolean classifySimpleInversion = false;
 
 		//iterate through node sets and merge nodes where necessary
 		//also checks each node for redundant members
-		//TODO: handle redundant members
-		for(Entry<String, TreeSet<GenomicNode>> tableEntry: genomicNodes.entrySet()) {
-			int nodesMerged = 0;
-			GenomicNode[] staticList = new GenomicNode[tableEntry.getValue().size()];
-			tableEntry.getValue().toArray(staticList);
-			if(staticList.length == 0)
-				break;
-			GenomicNode lastNode = staticList[0], currentNode = null;
-			for(int i = 1; i < staticList.length; i++){
-				currentNode = staticList[i];
-				if(currentNode.getStart().distanceTo(lastNode.getEnd()) < maxDistanceForNodeMerge){
-//					System.out.println("Merging Node at "+lastNode.getStart()+" with node at "+currentNode.getStart());
-//					for(Event e:lastNode.getEvents()){
-//						System.out.println(e);
-//					}
-//					System.out.println("----");
-//					for(Event e:currentNode.getEvents()){
-//						System.out.println(e);
-//					}
-					lastNode.mergeWithNode(currentNode);
-					if(!tableEntry.getValue().remove(currentNode))
-						System.out.println("NO CAN DO");
-					nodesMerged++;
-				} else {
-					lastNode.checkForRedundantEvents(maxDistanceForNodeMerge);
-					lastNode = currentNode;
-				}
-			}
-			lastNode.checkForRedundantEvents(maxDistanceForNodeMerge);
-			System.out.println("Nodes merged: "+nodesMerged);
-		}
+
+		mergeNodes(genomicNodes, 15, true);
+
 		System.out.println("Events merged: "+GenomicNode.global_event_merge_counter);
 
 		//String goldStandard = args[1].substring(0, 22)+"_2.fa";
@@ -772,9 +781,8 @@ public class Clove {
 
 				//iterate through all event-event pairing in this node and assess for complex events
 
+				//handling the null node introduced by breakends
 				if(currentNode.getStart().getPos() == -1){
-					//this is created by all the breakends that have no real second coordinate
-					//TODO: Prevent this behaviour in a more reasonable fashion
 					continue;
 				}
 
@@ -790,7 +798,7 @@ public class Clove {
 
 						// skip removed events and events where both nodes are the same
 						if(e1 == e2 || removeEvents.contains(e2) || removeEvents.contains(e1)
-								|| e1.otherNode(currentNode) == currentNode || e2.otherNode(currentNode) == currentNode)
+								|| e1.otherNodes(currentNode).get(0) == currentNode || e2.otherNodes(currentNode).get(0) == currentNode)
 							continue;
 						switch(e1.getType()){
 							//inversions
@@ -809,7 +817,7 @@ public class Clove {
 
 								}
 								else if(e2.getType() == EVENT_TYPE.INV2 ){
-									GenomicNode other1 = e1.otherNode(currentNode), other2 = e2.otherNode(currentNode);
+									GenomicNode other1 = e1.otherNodes(currentNode).get(0), other2 = e2.otherNodes(currentNode).get(0);
 									if(other1.compareTo(other2) > 0){
 										Event e3 = other1.existsDeletionEventTo(other2);
 										if(e3 != null){
@@ -847,7 +855,7 @@ public class Clove {
 							//duplications and translocations
 							case DEL: {
 								if(e2.getType() == EVENT_TYPE.TAN){
-									GenomicNode other1 = e1.otherNode(currentNode), other2 = e2.otherNode(currentNode);
+									GenomicNode other1 = e1.otherNodes(currentNode).get(0), other2 = e2.otherNodes(currentNode).get(0);
 									if(other1.compareTo(other2) < 0 && currentNode.compareTo(other1) < 0
 											|| other2.compareTo(other1) < 0 && other1.compareTo(currentNode) < 0){
 										Event e3 = other1.existsDeletionEventTo(other2);
@@ -934,7 +942,7 @@ public class Clove {
 							//interchromosomal events
 							case ITX1: {
 								if(e2.getType() == EVENT_TYPE.ITX2) {
-									GenomicNode other1 = e1.otherNode(currentNode), other2 = e2.otherNode(currentNode);
+									GenomicNode other1 = e1.otherNodes(currentNode).get(0), other2 = e2.otherNodes(currentNode).get(0);
 									if(! other1.getStart().onSameChromosome(other2.getStart()) )
 										break;
 									GenomicCoordinate eventStart, eventEnd, eventInsert;
@@ -972,7 +980,7 @@ public class Clove {
 							}
 							case INVTX1: {
 								if(e2.getType() == EVENT_TYPE.INVTX2) {
-									GenomicNode other1 = e1.otherNode(currentNode), other2 = e2.otherNode(currentNode);
+									GenomicNode other1 = e1.otherNodes(currentNode).get(0), other2 = e2.otherNodes(currentNode).get(0);
 									if(other1.getStart().onSameChromosome(other2.getStart()) && other1.getEnd().compareTo(other2.getStart()) > 0){
 										GenomicCoordinate eventStart = (e2.getNode(true)==currentNode? e2.getC2() : e2.getC1()),
 												eventEnd = (e1.getNode(true)==currentNode? e1.getC2() : e1.getC1()),
@@ -1119,34 +1127,9 @@ public class Clove {
             }
 		}
 
-		//TODO: Export this to function
+		mergeNodes(genomicNodes,5000,false);
 
-        maxDistanceForNodeMerge = 5000;
-
-        for(Entry<String, TreeSet<GenomicNode>> tableEntry: genomicNodes.entrySet()) {
-            int nodesMerged = 0;
-            GenomicNode[] staticList = new GenomicNode[tableEntry.getValue().size()];
-            tableEntry.getValue().toArray(staticList);
-            if(staticList.length == 0)
-                break;
-            GenomicNode lastNode = staticList[0], currentNode = null;
-            for(int i = 1; i < staticList.length; i++){
-                currentNode = staticList[i];
-                if(currentNode.getStart().distanceTo(lastNode.getEnd()) < maxDistanceForNodeMerge){
-
-                    lastNode.mergeWithNode(currentNode);
-                    if(!tableEntry.getValue().remove(currentNode))
-                        System.out.println("NO CAN DO");
-                    nodesMerged++;
-                } else {
-                    lastNode.checkForRedundantEvents(maxDistanceForNodeMerge);
-                    lastNode = currentNode;
-                }
-            }
-            lastNode.checkForRedundantEvents(maxDistanceForNodeMerge);
-            System.out.println("Nodes merged in second run: "+nodesMerged);
-        }
-        System.out.println("Events merged in second run: "+GenomicNode.global_event_merge_counter);
+        System.out.println("Events merged in second run: "+GenomicNode.global_event_merge_counter );
 
         // This time we iterate to find more specific SVs like Knockouts and "unconnected Duplications"
 
@@ -1175,7 +1158,7 @@ public class Clove {
 
                         // skip removed events and events where both nodes are the same
                         if (e1 == e2 || removeEvents.contains(e2) || removeEvents.contains(e1)
-                                || e1.otherNode(currentNode) == currentNode || e2.otherNode(currentNode) == currentNode)
+                                || e1.otherNodes(currentNode).get(0) == currentNode || e2.otherNodes(currentNode).get(0) == currentNode)
                             continue;
                         switch (e1.getType()) {
                             //inversions
@@ -1308,7 +1291,7 @@ public class Clove {
                         if(newComplexEvent != null){
                             //-> add events to cleanup and break current loop
 
-                            System.out.println(newComplexEvent.toString());
+                            //System.out.println(newComplexEvent.toString());
                             newComplexEvents.add(newComplexEvent);
                             for(Event e: newComplexEvent.getEventsInvolvedInComplexEvent()){
                                 removeEvents.add(e);
@@ -1349,6 +1332,13 @@ public class Clove {
 		for (Entry<String, TreeSet<GenomicNode>> tableEntry : genomicNodes.entrySet()) {
 			//System.out.println("Working on Entry: "+tableEntry.toString());
 			for (GenomicNode currentNode : tableEntry.getValue()) {
+
+				if (currentNode.getStart().getPos() == -1) {
+					//this is created by all the breakends that have no real second coordinate
+					//TODO: Prevent this behaviour in a more reasonable fashion
+					continue;
+				}
+
 //				if (currentNode.getEvents().size() > 1) {
 //					System.out.println("Node might be shifty: "+currentNode.getEvents().size()+" members!");
 //					System.out.println(currentNode.getEvents().get(0)+"  "+currentNode.getEvents().get(1));
@@ -1438,11 +1428,14 @@ public class Clove {
 
 					//System.out.println(e);
 					//}
-					if(e.otherNode(currentNode) == currentNode){
+					if(e.otherNodes(currentNode).get(0) == currentNode){
 						skipEvents.add(e);
 						//System.out.println("Self reference: "+e);
 					} else {
-						e.otherNode(currentNode).getEvents().remove(e);
+						//System.out.println(e);
+						if(e.otherNodes(currentNode).get(0)!=null){
+							e.otherNodes(currentNode).get(0).getEvents().remove(e);
+						}
 					}
 				}
 				currentNode.getEvents().addAll(newEvents);
@@ -1466,6 +1459,12 @@ public class Clove {
 		HashSet<Event> skipEvents = new HashSet<Event>();
 		for(Entry<String, TreeSet<GenomicNode>> tableEntry: genomicNodes.entrySet()) {
 			for(GenomicNode currentNode: tableEntry.getValue()){
+
+				if (currentNode.getStart().getPos() == -1) {
+					//this is created by all the breakends that have no real second coordinate
+					continue;
+				}
+
 				for(Event e: currentNode.getEvents()){
 					if(skipEvents.contains(e)){
 						continue;

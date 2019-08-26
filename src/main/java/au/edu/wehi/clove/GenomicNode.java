@@ -40,6 +40,10 @@ public class GenomicNode implements Comparable<GenomicNode>{
 		return events;
 	}
 
+	public void addEvent(Event e) {
+		this.events.add(e);
+	}
+
 	@Override
 	public int compareTo(GenomicNode other) {
 		//this compare method never spits out equal, so that the adding to TreeSets 
@@ -61,34 +65,40 @@ public class GenomicNode implements Comparable<GenomicNode>{
 	//Lets try 2 lateron
 	public void mergeWithNode(GenomicNode other){
 
-		if(!this.start.onSameChromosome(other.start) || this.end.compareTo(other.start) >0 || other.getEvents().size()>1){
-			System.out.println("Event size : " + other.getEvents().size());
-			System.err.println("Assumptions violated in mergeWithNode!");
+		if(!this.start.onSameChromosome(other.start) || this.end.compareTo(other.start) >0 && other.getEvents().size()>1){
+			//System.err.println("Event size : " + other.getEvents().size());
+			//System.err.println("Assumptions violated in mergeWithNode!");
+			return;
 		}
 		//change end coordinate of node interval
 		this.end = other.end;
 		//add event if necessary
-		if(other.events.size() == 0)
+		if(other.getEvents().size() == 0)
 			return;
-		Event e = other.events.get(0);
-		if(!events.contains(e)){
-			events.add(e);
-		}
-		//adjust pointers to new node where applicable
-		if(e.getC1() == other.start){
-			e.setNode(this, true);
-		}
-		if(e.getC2() == other.start){
-			e.setNode(this, false);
-		}
-		if(e.getC2() == other.end){
-			e.setNode(this, false);
+
+		for(Event e: other.getEvents() ) {
+			//Event e = other.getEvents().get(0);
+			if (!this.getEvents().contains(e)) {
+				this.addEvent(e);
+			}
+			//adjust pointers to new node where applicable
+			if (e.getC1() == other.start) {
+				e.setNode(this, true);
+			}
+			if (e.getC2() == other.start) {
+				e.setNode(this, false);
+			}
+			if (e.getC2() == other.end) {
+				e.setNode(this, false);
+			}
 		}
 	}
 
 	public void checkForRedundantEvents(int maxDistanceForNodes){
 		Event e1=null, e2=null;
 		HashSet<Event> redundantEvents = new HashSet<Event>();
+
+		//System.out.println("Start of this node is at: " + this.getStart().toString());
 
 		try {
 			for (int i = 0; i < this.getEvents().size(); i++) {
@@ -98,8 +108,10 @@ public class GenomicNode implements Comparable<GenomicNode>{
 					e2 = events.get(j);
 
 					if (redundantEvents.contains(e2)) continue;
-					if (e1.otherNode(this).getStart().distanceTo(e2.otherNode(this).getStart()) < maxDistanceForNodes && e1.getType() == e2.getType()) {
-						//if(Event.sameNodeSets(e1,e2) && e1.getType() == e2.getType()){
+
+					if ( e2.otherNodes(this).size() == 2 &&
+							e1.otherNodes(this).get(0).getStart().distanceTo(e2.otherNodes(this).get(0).getStart()) < maxDistanceForNodes
+							&& e1.getType() == e2.getType()) {
 						//System.out.println("Redundant events identified: "+e1+" "+e2);
 						e1.setId(e1.getId() + "-" + e2.getId());
 						e1.addCaller(e2.getCalledBy());
@@ -110,19 +122,19 @@ public class GenomicNode implements Comparable<GenomicNode>{
 				}
 			}
 			for (Event e : redundantEvents) {
-				e.otherNode(this).getEvents().remove(e);
+				e.otherNodes(this).get(0).getEvents().remove(e);
 			}
 			this.events.removeAll(redundantEvents);
 
 		} catch (Exception e){
-			System.out.print(e1.toString() + e2.toString());
-			System.exit(666);
+			System.out.println(e1.toString() + " + " + e2.toString() + " Message: " + e.getMessage() );
+			System.exit(2);
 		}
 	}
 	
 	public Event existsDeletionEventTo(GenomicNode other){
 		for(Event e: this.events){
-			if(e.otherNode(this) == other && e.getType()==EVENT_TYPE.DEL)
+			if(e.otherNodes(this).get(0) == other && e.getType()==EVENT_TYPE.DEL)
 				return e;
 		}
 		return null;

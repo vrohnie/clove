@@ -1,5 +1,6 @@
 package au.edu.wehi.clove;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.StringTokenizer;
 import java.util.regex.Matcher;
@@ -28,7 +29,7 @@ public class Event {
 
 	private GenomicCoordinate c1, c2;
 	private EVENT_TYPE type;
-	private GenomicNode[] myNodes;
+	private ArrayList<GenomicNode> myNodes;
 	private String additionalInformation;
 	private GenomicCoordinate coord;
 	private String id;
@@ -49,7 +50,7 @@ public class Event {
 			this.c2 = c1;
 		}
 		this.type = type;
-		myNodes = new GenomicNode[2];
+		myNodes = new ArrayList<GenomicNode>(2);
 		this.info="";
 		this.calledBy = new HashSet<Clove.SV_ALGORITHM>();
 		this.calledTimes = 0;
@@ -71,7 +72,7 @@ public class Event {
 		}
 		this.coord = c1;
 		this.type = type;
-		myNodes = new GenomicNode[2];
+		myNodes = new ArrayList<GenomicNode>(2);
 		this.id=id;
 		this.ref=ref;
 		this.alt=alt;
@@ -831,23 +832,45 @@ public class Event {
 	}
 	
 	public void setNode(GenomicNode n, boolean firstCoordinate){
-		if(firstCoordinate)
-			myNodes[0] = n;
-		else
-			myNodes[1] = n;
+		if(firstCoordinate) {
+			if (myNodes.size() > 0) {
+				myNodes.set(0, n);
+			} else {
+				myNodes.add(n);
+			}
+		} else {
+			if (myNodes.size() > 1 ) {
+				myNodes.set(1, n);
+			} else if( myNodes.size() == 0 ) {
+				myNodes.add(null);
+			}
+			myNodes.add(n);
+
+		}
 	}
-	
+
+	public void setNodes( ArrayList<GenomicNode> nodes){
+		myNodes = nodes;
+	}
+
+
 	public GenomicNode getNode(boolean firstCoordinate){
-		if(firstCoordinate)
-			return myNodes[0];
-		else
-			return myNodes[1];
+    	if(this.getNodes().size() > 1){
+			if(firstCoordinate)
+				return myNodes.get(0);
+			else
+				return myNodes.get(1);
+		}
+    	return null;
+	}
+
+	public ArrayList<GenomicNode> getNodes(){
+    	return myNodes;
 	}
 	
 	
 	public static boolean sameNodeSets(Event e1, Event e2){
-		if(e1.myNodes[0] == e2.myNodes[0] && e1.myNodes[1] == e2.myNodes[1] 
-				|| e1.myNodes[0] == e2.myNodes[1] && e1.myNodes[1] == e2.myNodes[0])
+		if(e1.getNodes().containsAll(e2.getNodes()))
 			return true;
 		return false;		
 	}
@@ -861,15 +884,22 @@ public class Event {
 		}
 	}
 	
-	public GenomicNode otherNode(GenomicNode node){
-		if(myNodes[0] == node) {
-			return myNodes[1];
+	public ArrayList<GenomicNode> otherNodes(GenomicNode node){
+
+		ArrayList<GenomicNode> others = (ArrayList<GenomicNode>) myNodes.clone();
+
+    	if(others.size() > 1) {
+			Integer ind = others.indexOf(node);
+
+			if(!ind.equals(null)){
+				others.remove(node);
+				return others;
+			}
+
+			System.err.println("otherNode: query node is not associated with Event! \n" + myNodes.size());
+			return null;
 		}
-		if(myNodes[1] == node) {
-			return myNodes[0];
-		}
-		System.err.println("otherNode: query node is not associated with Event!");
-		System.out.println(this.toString());
+		//System.out.println("otherNode: Event has only one node");
 		return null;
 	}
 	
@@ -878,7 +908,7 @@ public class Event {
 	}
 	
 	public void processAdditionalInformation(){
-		if(this.additionalInformation!= null && this.additionalInformation.matches("[ACGT]+") && myNodes[0] == myNodes[1]){
+		if(this.additionalInformation!= null && this.additionalInformation.matches("[ACGT]+") && myNodes.get(0) == myNodes.get(1) ){
 			this.type = EVENT_TYPE.INS;
 		}
 	}

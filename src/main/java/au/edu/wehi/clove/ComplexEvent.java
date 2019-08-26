@@ -1,6 +1,7 @@
 package au.edu.wehi.clove;
 
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -15,8 +16,8 @@ public class ComplexEvent extends Event{
 			EVENT_TYPE type, Event[] involvedEvents, Boolean addition, GenomicNode hostingNode) {
 		super(c1, c2, type);
 		this.eventsInvolvedInComplexEvent = involvedEvents;
-		super.setNode(hostingNode, true);
-		super.setNode(hostingNode, false);
+		//super.setNode(hostingNode, true);
+		//super.setNode(hostingNode, false);
 //		String[] ids = new String[involvedEvents.length];
 //		for (int i=0; i<ids.length;i++){ ids[i] = involvedEvents[i].getId();}
 //		String newId = String.join("+", ids) ;
@@ -32,12 +33,15 @@ public class ComplexEvent extends Event{
 		String id = "";
 		Double qual = 0.0;
 		Set<String> filterSet = new LinkedHashSet<>();
+		Set<GenomicNode> nodes = new LinkedHashSet<GenomicNode>();
 
 		for(Event e: involvedEvents){
 			id = id + e.getId() + (addition?"+":"-");
 			qual += Double.parseDouble(e.getQual());
 			String[] curfilters = e.getFilter().split(";");
 			filterSet.addAll(Arrays.asList(curfilters));
+			nodes.add(e.getNode(true));
+			nodes.add(e.getNode(false));
 		}
 
 		id = id.substring(0, id.length() - 1);
@@ -48,6 +52,10 @@ public class ComplexEvent extends Event{
 		this.setRef(involvedEvents[0].getRef());
 		this.setFilter(filter);
 		this.setQual(String.format( "%.2f", qual ));
+		ArrayList<GenomicNode> nodesList = new ArrayList();
+		nodesList.addAll(nodes);
+		this.setNodes(nodesList);
+
 	}
 
 	public ComplexEvent(GenomicCoordinate c1, GenomicCoordinate c2,
@@ -60,6 +68,7 @@ public class ComplexEvent extends Event{
 //		String newId = String.join("+", ids) ;
 //		super.setId(newId);
 	}
+
 
 	public Event[] getEventsInvolvedInComplexEvent(){
 		return this.eventsInvolvedInComplexEvent;
