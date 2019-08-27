@@ -42,15 +42,17 @@ public class Event {
 	private int calledTimes;
 		
 	public Event(GenomicCoordinate c1, GenomicCoordinate c2, EVENT_TYPE type){
-		if(c1.compareTo(c2) < 0){
+
+		if(c1.compareTo(c2) <= 0){
 			this.c1 = c1;
 			this.c2 = c2;
 		} else {
 			this.c1 = c2;
 			this.c2 = c1;
 		}
+
 		this.type = type;
-		myNodes = new ArrayList<GenomicNode>(2);
+		myNodes = new ArrayList<GenomicNode>();
 		this.info="";
 		this.calledBy = new HashSet<Clove.SV_ALGORITHM>();
 		this.calledTimes = 0;
@@ -72,7 +74,7 @@ public class Event {
 		}
 		this.coord = c1;
 		this.type = type;
-		myNodes = new ArrayList<GenomicNode>(2);
+		myNodes = new ArrayList<GenomicNode>();
 		this.id=id;
 		this.ref=ref;
 		this.alt=alt;
@@ -162,6 +164,20 @@ public class Event {
 	 * The distinctions between INV1/2 etc are arbitrary, and have to be consistent across all the inputs.
 	 */
 	private static EVENT_TYPE classifySocratesBreakpoint(GenomicCoordinate c1, String o1, GenomicCoordinate c2, String o2) {
+
+		if(c1.compareTo(c2)>0){
+			GenomicCoordinate tmp;
+			String tmp_o;
+			tmp = new GenomicCoordinate(c1.getChr(), c1.getPos());
+			c1.setChr(c2.getChr());
+			c1.setPos(c2.getPos());
+			c2.setChr(tmp.getChr());
+			c2.setPos(tmp.getPos());
+			tmp_o = o1;
+			o1 = o2;
+			o2 = tmp_o;
+		}
+
 		if (o2.equals("")) {
 			if (o1.equals("+")) {
 				return EVENT_TYPE.BE1;
@@ -607,6 +623,7 @@ public class Event {
 
         String[] bits = output.split("\t");
 
+//        System.out.println(output + "\n" + bits.length);
 //        if(bits.length != 7){
 //        	System.err.println("Corrupted VCF File");
 //        	System.exit(1 );
@@ -633,8 +650,11 @@ public class Event {
         GenomicCoordinate c2 = new GenomicCoordinate(chr2, p2);
         EVENT_TYPE type = EVENT_TYPE.XXX;
         if (!orientation1.equals("")) {
+//        	 System.out.println(c1.toString() + " " + orientation1 + " " + c2.toString());
              type = Event.classifySocratesBreakpoint(c1, orientation1, c2, orientation2);
-			 info="SVTYPE="+type+";CHR2="+chr2+";END="+p2;
+//			 System.out.println(c1.toString() + " " + orientation1 + " " +  " " + c2.toString() + type);
+
+			info="SVTYPE="+type+";CHR2="+chr2+";END="+p2;
 		}
 
         pattern = Pattern.compile("SVTYPE=(.+?)");
@@ -841,10 +861,12 @@ public class Event {
 		} else {
 			if (myNodes.size() > 1 ) {
 				myNodes.set(1, n);
-			} else if( myNodes.size() == 0 ) {
-				myNodes.add(null);
+			} else{
+				if( myNodes.size() == 0 ) {
+					myNodes.add(null);
+				}
+				myNodes.add(n);
 			}
-			myNodes.add(n);
 
 		}
 	}
@@ -878,9 +900,9 @@ public class Event {
 	@Override
 	public String toString() {
 		if(c1.onSameChromosome(c2)){
-			return c1.getChr()+":"+c1.getPos()+"-"+c2.getPos()+" "+type;
+			return this.getId()+" "+c1.getChr()+":"+c1.getPos()+"-"+c2.getPos()+" "+type;
 		} else {
-			return c1+"<->"+c2+" "+type;
+			return this.getId()+" "+c1+"<->"+c2+" "+type;
 		}
 	}
 	
@@ -1012,6 +1034,8 @@ public class Event {
 			return "<RDE>";
 		} else if(type.equals(EVENT_TYPE.COMPLEX_REPLACED_DELETION)) {
 			return "<IRD>";
+		} else if(type.equals(EVENT_TYPE.VECTOR_PARTS)) {
+			return "<VEC>";
 		} else {
 			return "<XXX>";
 		} 
@@ -1043,5 +1067,16 @@ public class Event {
 		} else {
     		this.setFilter(this.getFilter() + ";" + filter);
 		}
+	}
+
+	public Boolean sameTypes(Event other){
+    	if(this.getType().equals(other.getType())){
+    		return true;
+		}
+//    	else if (( this.getType() == EVENT_TYPE.ITX2 && other.getType() == EVENT_TYPE.ITX1) || (
+//				this.getType() == EVENT_TYPE.ITX1 && other.getType() == EVENT_TYPE.ITX2)) {
+//    		return true;
+//		}
+    	return false;
 	}
 }

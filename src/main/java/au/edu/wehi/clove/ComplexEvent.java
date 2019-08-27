@@ -37,7 +37,12 @@ public class ComplexEvent extends Event{
 
 		for(Event e: involvedEvents){
 			id = id + e.getId() + (addition?"+":"-");
-			qual += Double.parseDouble(e.getQual());
+			try{
+				qual += Double.parseDouble(e.getQual());
+			} catch (NumberFormatException ex){
+				qual += 0;
+			}
+
 			String[] curfilters = e.getFilter().split(";");
 			filterSet.addAll(Arrays.asList(curfilters));
 			nodes.add(e.getNode(true));

@@ -109,13 +109,27 @@ public class GenomicNode implements Comparable<GenomicNode>{
 
 					if (redundantEvents.contains(e2)) continue;
 
-					if ( e2.otherNodes(this).size() == 2 &&
+					if ( e2.otherNodes(this).size() < 2 &&
 							e1.otherNodes(this).get(0).getStart().distanceTo(e2.otherNodes(this).get(0).getStart()) < maxDistanceForNodes
-							&& e1.getType() == e2.getType()) {
+							&& e1.sameTypes(e2) ) {
 						//System.out.println("Redundant events identified: "+e1+" "+e2);
 						e1.setId(e1.getId() + "-" + e2.getId());
 						e1.addCaller(e2.getCalledBy());
 						e1.increaseCalls(e2.getCalledTimes());
+
+						Double qual1, qual2;
+						try{
+							qual1 = Double.parseDouble(e1.getQual());
+						} catch (NumberFormatException ex){
+							qual1 = 0.0;
+						}
+
+						try{
+							qual2 = Double.parseDouble(e2.getQual());
+						} catch (NumberFormatException ex){
+							qual2 = 0.0;
+						}
+						e1.setQual(String.format( "%.2f", Double.max(qual1,qual2)));
 						redundantEvents.add(e2);
 						global_event_merge_counter++;
 					}

@@ -155,16 +155,17 @@ public class Clove {
 
 					lastNode.mergeWithNode(currentNode);
 					if(!tableEntry.getValue().remove(currentNode))
-						System.out.println("NO CAN DO");
+						System.out.println("Couldn't remove node");
 					nodesMerged++;
 				} else {
-					lastNode.checkForRedundantEvents(maxDistanceForNodeMerge);
+					if(checkRedundantEvents)
+						lastNode.checkForRedundantEvents(maxDistanceForNodeMerge);
 					lastNode = currentNode;
 				}
 			}
 			if(checkRedundantEvents)
 				lastNode.checkForRedundantEvents(maxDistanceForNodeMerge);
-			System.out.println("Nodes merged in second run: "+nodesMerged);
+			System.out.println("Nodes merged: "+nodesMerged);
 		}
 	}
 
@@ -216,9 +217,9 @@ public class Clove {
 							l2 = generateNodeLabel(ee.getNode(false));
 							//if (l1.equals("ecoli_28204143_28204160")){
 							//if (l1.equals("ecoli_24118329_24118583")){
-							System.out.println("COMPLEX_INV:");
-							System.out.println("l1:\t"+generateNodeLabel(ee.getNode(true))+"\t");
-							System.out.println("l2:\t"+generateNodeLabel(ee.getNode(false))+"\t");
+//							System.out.println("COMPLEX_INV:");
+//							System.out.println("l1:\t"+generateNodeLabel(ee.getNode(true))+"\t");
+//							System.out.println("l2:\t"+generateNodeLabel(ee.getNode(false))+"\t");
 							//}
 							output.write(l1+"->"+l2+"[label=\"COMPLEX_INV\"  dir=both];\n"); break;//should we differentiate COMPLEX_INV and INV?
 						case COMPLEX_TRANSLOCATION:
@@ -470,7 +471,11 @@ public class Clove {
 	private static double getReadDepth(SamReader samReader, String chr, int start, int end){
 
 		if(start >= end){
-			return -1;
+//			System.err.println("Start bigger than end");
+//			return -1;
+			Integer tmp = start;
+			start = end;
+			end = tmp;
 		}
 
 		//SAMFileReader  samReader=new  SAMFileReader(new  File(str));
@@ -488,6 +493,7 @@ public class Clove {
 		//SamLocusIterator.setEmitUncoveredLoci(false);
 
 		if ( end - start > 5000){
+			System.err.println(chr + ":" + start + "-" + end);
 			System.err.println("Region too big for Read Depth check");
 			return -1;
 		}
@@ -710,6 +716,7 @@ public class Clove {
 							break;
 					}
 
+					// System.out.println("P1 " + e.toString());
 					allEvents.add(e);
 
 				} catch (Exception ex){
@@ -740,6 +747,7 @@ public class Clove {
 		for (Event e: allEvents){
 			addEventToNodeList(e, genomicNodes, true);
 			addEventToNodeList(e, genomicNodes, false);
+
 		}
 
 //		establish distance for "close" events according to algorithm
@@ -793,6 +801,9 @@ public class Clove {
 
 				for(int i=0; i<currentNode.getEvents().size(); i++){
 					e1 = currentNode.getEvents().get(i);
+
+					// System.out.println("P2: " + e1.toString());
+
 					for(int j=0; j<currentNode.getEvents().size(); j++){
 						e2 = currentNode.getEvents().get(j);
 
@@ -1089,8 +1100,19 @@ public class Clove {
 							//-> add events to cleanup and break current loop
 
 							newComplexEvents.add(newComplexEvent);
+							//System.out.println("New Event is: "+ newComplexEvent.toString());
 							for(Event e: newComplexEvent.getEventsInvolvedInComplexEvent()){
+
+								// As this event is not an enclosed cycle we might need the ITX events once again
+								if(newComplexEvent.getType()==EVENT_TYPE.COMPLEX_BIG_INSERTION &&
+										(e.getType()== EVENT_TYPE.ITX1 || e.getType()== EVENT_TYPE.ITX2 ||
+												e.getType()== EVENT_TYPE.INVTX1 || e.getType()== EVENT_TYPE.INVTX2)){
+									continue;
+								}
+
 								removeEvents.add(e);
+							//	System.out.println("Is removed "  + e.toString());
+
 							}
 							newComplexEvent = null;
 
@@ -1101,23 +1123,24 @@ public class Clove {
 				}
 				//all event pairings have been investigated 
 				//-> clean up some stuff by removing events and adding the new complex ones.
+
+				for(Event e: newComplexEvents){
+					e.getNode(true).getEvents().add(e);
+				}
+
 				for(Event e: removeEvents){
+
 					e.getNode(true).getEvents().remove(e);
 					e.getNode(false).getEvents().remove(e);
 
-					//TODO: Think about why events are not replaced by complex ones (probably because one event can only have two Coordinates and two nodes)
-                    //Maybe we should make number of coordinates and nodes arbitrary
 					if(e.getNode(true).getEvents().size()==0){
-					    //System.out.println("Node is empty");
-                        removeNodes.add(e.getNode(true));
-                    }
-                    if(e.getNode(false).getEvents().size()==0){
-                        //System.out.println("Node is empty");
-                        removeNodes.add(e.getNode(false));
-                    }
-				}
-				for(Event e: newComplexEvents){
-					e.getNode(true).getEvents().add(e);
+						//System.out.println("Node is empty");
+						removeNodes.add(e.getNode(true));
+					}
+					if(e.getNode(false).getEvents().size()==0){
+						//System.out.println("Node is empty");
+						removeNodes.add(e.getNode(false));
+					}
 				}
 
 			}
@@ -1135,15 +1158,14 @@ public class Clove {
 
         for (Entry<String, TreeSet<GenomicNode>> tableEntry : genomicNodes.entrySet()) {
             HashSet<GenomicNode> removeNodes = new HashSet<GenomicNode>();
-            System.out.println("Nodes on chr " + tableEntry.getKey() + ": " + tableEntry.getValue().size());
+            //System.out.println("Nodes on chr " + tableEntry.getKey() + ": " + tableEntry.getValue().size());
             for (GenomicNode currentNode : tableEntry.getValue()) {
 
                 //iterate through all event-event pairing in this node and assess for complex events
 
                 if (currentNode.getStart().getPos() == -1) {
                     //this is created by all the breakends that have no real second coordinate
-                    //TODO: Prevent this behaviour in a more reasonable fashion
-                    continue;
+                   continue;
                 }
 
                 Event e1, e2;
@@ -1153,35 +1175,84 @@ public class Clove {
 
                 for (int i = 0; i < currentNode.getEvents().size(); i++) {
                     e1 = currentNode.getEvents().get(i);
-                    for (int j = 0; j < currentNode.getEvents().size(); j++) {
+
+					//System.out.println("P3: " + e1.toString());
+
+					for (int j = 0; j < currentNode.getEvents().size(); j++) {
                         e2 = currentNode.getEvents().get(j);
 
                         // skip removed events and events where both nodes are the same
                         if (e1 == e2 || removeEvents.contains(e2) || removeEvents.contains(e1)
                                 || e1.otherNodes(currentNode).get(0) == currentNode || e2.otherNodes(currentNode).get(0) == currentNode)
                             continue;
-                        switch (e1.getType()) {
+
+						GenomicCoordinate eventStart = null, eventEnd = null, eventReplacement= null;
+						EVENT_TYPE type = null;
+
+						switch (e1.getType()) {
                             //inversions
                             case ITX1:
-                                if(e2.getType()==EVENT_TYPE.ITX2 && Event.sameNodeSets(e1, e2)){
+                                if(e2.getType()==EVENT_TYPE.ITX2) {
+									if (Event.sameNodeSets(e1, e2)) {
+										if (e2.getNode(true) == e1.getNode(true)) {
+											//that' right, else it would be weird
 
-                                    if (e2.getNode(true) == e1.getNode(true)){
-                                        //that' right, else it would be weird
-                                        GenomicCoordinate eventStart, eventEnd, eventReplacement;
+											eventStart = (e1.getC1().compareTo(e2.getC1()) < 0 ? e1.getC1() : e2.getC2());
+											eventEnd = (e1.getC1().compareTo(e2.getC1()) < 0 ? e2.getC1() : e1.getC2());
+											eventReplacement = (e1.getC1().compareTo(e2.getC1()) < 0 ? e1.getC2() : e2.getC1());
+											type = EVENT_TYPE.COMPLEX_REPLACED_DELETION;
 
+										}
+									} else if (e1.getNode(true) == currentNode && e2.getNode(true) == currentNode &&
+											e1.getC1().compareTo(e2.getC1()) > 0) {
 
-                                        eventStart = (e1.getC1().compareTo(e2.getC1()) < 0?e1.getC1():e2.getC2());
-                                        eventEnd = (e1.getC1().compareTo(e2.getC1()) < 0?e2.getC1():e1.getC2());
-                                        eventReplacement = (e1.getC1().compareTo(e2.getC1()) < 0?e1.getC2():e2.getC1());
+										eventStart = e2.getC1();
+										eventEnd = e1.getC1();
+										eventReplacement = e1.getC2();
+										type = EVENT_TYPE.VECTOR_PARTS;
 
-                                        newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_REPLACED_DELETION, (new Event[]{e1, e2}), true, currentNode, eventReplacement);
+									} else if (e1.getNode(false) == currentNode && e2.getNode(false) == currentNode &&
+											e1.getC2().compareTo(e2.getC2()) < 0) {
 
-                                        double readDepth = (checkRD ? getReadDepth(samReader, eventStart.getChr(), eventStart.getPos(), eventEnd.getPos()) : -1);
+										eventStart = e1.getC2();
+										eventEnd = e2.getC2();
+										eventReplacement = e1.getC1();
+										type = EVENT_TYPE.VECTOR_PARTS;
 
-                                        tempInfo = "SVTYPE=" + newComplexEvent.getAlt().substring(1, 4) + ";CHR2=" + eventEnd.getChr() + ";END=" + eventEnd.getPos() + ";ADP=" + readDepth;
-                                        newComplexEvent.setInfo(tempInfo);
+									}
+								} else if (e2.getType()==EVENT_TYPE.INVTX1 && e1.getNode(false)==currentNode){
 
-                                    } //else if (e2.getNode(false)==currentNode && e1.getNode(false)==currentNode) {
+									eventStart = e1.getC2();
+									eventEnd = e2.getNode(true)==currentNode?e2.getC1():e2.getC2();
+									eventReplacement = e1.getC1();
+									type = EVENT_TYPE.VECTOR_PARTS;
+
+								} else if (e2.getType()==EVENT_TYPE.INVTX2 && e1.getNode(true)==currentNode){
+
+									eventStart = e2.getNode(true)==currentNode?e2.getC1():e2.getC2();
+									eventEnd = e1.getC1();
+									eventReplacement = e1.getC2();
+									type = EVENT_TYPE.VECTOR_PARTS;
+
+								} else if (e2.getType() == EVENT_TYPE.ITX1){
+                                	if(e1.getNode(true)==currentNode && e2.getNode(false) == currentNode &&
+										e1.getC1().compareTo(e2.getC2()) > 0){
+
+										eventStart = e2.getC2();
+										eventEnd = e1.getC1();
+										eventReplacement = e1.getC2();
+										type = EVENT_TYPE.VECTOR_PARTS;
+									}
+//                                	else if (e1.getNode(false)==currentNode && e2.getNode(true) == currentNode &&
+//											e1.getC2().compareTo(e2.getC1()) < 0){
+//										eventStart = e1.getC2();
+//										eventEnd = e2.getC1();
+//										eventReplacement = e1.getC1();
+//										type = EVENT_TYPE.VECTOR_PARTS;
+//									}
+								}
+
+										//else if (e2.getNode(false)==currentNode && e1.getNode(false)==currentNode) {
 //
 //                                        //Not sure if I even need this one
 //
@@ -1198,94 +1269,202 @@ public class Clove {
 //                                        tempInfo = "SVTYPE=" + newComplexEvent.getAlt().substring(1, 4) + ";CHR2=" + eventEnd.getChr() + ";END=" + eventEnd.getPos() + ";ADP=" + readDepth;
 //                                        newComplexEvent.setInfo(tempInfo);
 //                                    }
-                                } else if(e2.getType()==EVENT_TYPE.ITX1 && Event.sameNodeSets(e1, e2)) {
-                                    if (e2.getNode(true) == e1.getNode(false)){
-                                        //that' right, else it would be weird
-                                        GenomicCoordinate eventStart, eventEnd, eventReplacement;
-
-                                        eventStart = (e1.getC1().compareTo(e2.getC2()) < 0?e1.getC1():e2.getC1());
-                                        eventEnd = (e1.getC1().compareTo(e2.getC2()) < 0?e2.getC2():e1.getC2());
-                                        eventReplacement = (e1.getC1().compareTo(e2.getC2()) < 0?e1.getC2():e2.getC1());
-
-                                        newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_REPLACED_DELETION, (new Event[]{e1, e2}), true, currentNode, eventReplacement);
-
-                                        double readDepth = (checkRD ? getReadDepth(samReader, eventStart.getChr(), eventStart.getPos(), eventEnd.getPos()) : -1);
-
-                                        tempInfo = "SVTYPE=" + newComplexEvent.getAlt().substring(1, 4) + ";CHR2=" + eventEnd.getChr() + ";END=" + eventEnd.getPos() + ";ADP=" + readDepth;
-                                        newComplexEvent.setInfo(tempInfo);
-
-                                    }
-                                }
+//                                } else if(e2.getType()==EVENT_TYPE.ITX1 && Event.sameNodeSets(e1, e2)) {
+//                                    if (e2.getNode(true) == e1.getNode(false)){
+//                                        //that' right, else it would be weird
+//                                        GenomicCoordinate eventStart, eventEnd, eventReplacement;
+//
+//                                        eventStart = (e1.getC1().compareTo(e2.getC2()) < 0?e1.getC1():e2.getC1());
+//                                        eventEnd = (e1.getC1().compareTo(e2.getC2()) < 0?e2.getC2():e1.getC2());
+//                                        eventReplacement = (e1.getC1().compareTo(e2.getC2()) < 0?e1.getC2():e2.getC1());
+//
+//                                        newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_REPLACED_DELETION, (new Event[]{e1, e2}), true, currentNode, eventReplacement);
+//
+//                                        double readDepth = (checkRD ? getReadDepth(samReader, eventStart.getChr(), eventStart.getPos(), eventEnd.getPos()) : -1);
+//
+//                                        tempInfo = "SVTYPE=" + newComplexEvent.getAlt().substring(1, 4) + ";CHR2=" + eventEnd.getChr() + ";END=" + eventEnd.getPos() + ";ADP=" + readDepth;
+//                                        newComplexEvent.setInfo(tempInfo);
+//
+//                                    }
+//                                }
                                         // Complex InterChromosomal Replacement
                                 break;
 
                             case ITX2:
-                                if(e2.getType()==EVENT_TYPE.ITX2 && Event.sameNodeSets(e1, e2)) {
-                                    if (e2.getNode(true) == e1.getNode(false)){
-                                        //that' right, else it would be weird
-                                        GenomicCoordinate eventStart, eventEnd, eventReplacement;
+                            	if(e2.getType()==EVENT_TYPE.ITX2 &&
+								e1.getNode(true) == currentNode && e2.getNode(false) == currentNode &&
+								e1.getC1().compareTo(e2.getC2()) < 0){
+									eventStart = e1.getC1();
+									eventEnd = e2.getC2();
+									eventReplacement = e1.getC2();
+									type = EVENT_TYPE.VECTOR_PARTS;
 
-                                        eventStart = (e1.getC1().compareTo(e2.getC2()) < 0?e1.getC2():e2.getC2());
-                                        eventEnd = (e1.getC1().compareTo(e2.getC2()) < 0?e1.getC1():e2.getC1());
-                                        eventReplacement = (e1.getC1().compareTo(e2.getC2()) < 0?e1.getC1():e2.getC1());
-
-                                        newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_REPLACED_DELETION, (new Event[]{e1, e2}), true, currentNode, eventReplacement);
-
-                                        double readDepth = (checkRD ? getReadDepth(samReader, eventStart.getChr(), eventStart.getPos(), eventEnd.getPos()) : -1);
-
-                                        tempInfo = "SVTYPE=" + newComplexEvent.getAlt().substring(1, 4) + ";CHR2=" + eventEnd.getChr() + ";END=" + eventEnd.getPos() + ";ADP=" + readDepth;
-                                        newComplexEvent.setInfo(tempInfo);
-
-                                    }
-                                }
-                                break;
+								}
+//                                if(e2.getType()==EVENT_TYPE.ITX2 && Event.sameNodeSets(e1, e2)) {
+//                                    if (e2.getNode(true) == e1.getNode(false)){
+//                                        //that' right, else it would be weird
+//                                        GenomicCoordinate eventStart, eventEnd, eventReplacement;
+//
+//                                        eventStart = (e1.getC1().compareTo(e2.getC2()) < 0?e1.getC2():e2.getC2());
+//                                        eventEnd = (e1.getC1().compareTo(e2.getC2()) < 0?e1.getC1():e2.getC1());
+//                                        eventReplacement = (e1.getC1().compareTo(e2.getC2()) < 0?e1.getC1():e2.getC1());
+//
+//                                        newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_REPLACED_DELETION, (new Event[]{e1, e2}), true, currentNode, eventReplacement);
+//
+//                                        double readDepth = (checkRD ? getReadDepth(samReader, eventStart.getChr(), eventStart.getPos(), eventEnd.getPos()) : -1);
+//
+//                                        tempInfo = "SVTYPE=" + newComplexEvent.getAlt().substring(1, 4) + ";CHR2=" + eventEnd.getChr() + ";END=" + eventEnd.getPos() + ";ADP=" + readDepth;
+//                                        newComplexEvent.setInfo(tempInfo);
+//
+//                                    }
+//                                }
+//                                break;
 
                             case INVTX1:
-                                if(e2.getType()==EVENT_TYPE.INVTX2 && Event.sameNodeSets(e1, e2)){
-                                    // Complex InterChromosomal INVERTED Replacement
+                                if(e2.getType()==EVENT_TYPE.INVTX2){
+                                	if(Event.sameNodeSets(e1, e2)) {
+										// Complex InterChromosomal INVERTED Replacement
 
-                                    if (e2.getNode(true) == e1.getNode(false) &&
-                                        e1.getC1().compareTo(e2.getC1()) == e2.getC2().compareTo(e1.getC1()) ){
-                                        //that' right, else it would be weird
-                                        GenomicCoordinate eventStart, eventEnd, eventReplacement;
+										if (e2.getNode(true) == e1.getNode(true) &&
+												e1.getC1().compareTo(e2.getC1()) == e2.getC2().compareTo(e1.getC2())) {
+											//that' right, else it would be weird
 
-                                        eventStart = (e1.getC1().compareTo(e2.getC1()) < 0?e1.getC1():e1.getC2());
-                                        eventEnd = (e1.getC1().compareTo(e2.getC1()) < 0?e2.getC1():e2.getC2());
-                                        eventReplacement = (e1.getC1().compareTo(e2.getC1()) < 0?e2.getC2():e2.getC1());
+											eventStart = (e1.getC1().compareTo(e2.getC1()) < 0 ? e1.getC1() : e1.getC2());
+											eventEnd = (e1.getC1().compareTo(e2.getC1()) < 0 ? e2.getC1() : e2.getC2());
+											eventReplacement = (e1.getC1().compareTo(e2.getC1()) < 0 ? e2.getC2() : e2.getC1());
+											type = EVENT_TYPE.COMPLEX_INVERTED_REPLACED_DELETION;
 
-                                        newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_INVERTED_REPLACED_DELETION, (new Event[]{e1, e2}), true, currentNode, eventReplacement);
+										}
+									} else {
 
-                                        double readDepth = (checkRD ? getReadDepth(samReader, eventStart.getChr(), eventStart.getPos(), eventEnd.getPos()) : -1);
+                                		eventStart = e2.getNode(true) == currentNode? e2.getC1() : e2.getC2();
+										eventEnd = e1.getNode(true) == currentNode? e1.getC1() : e1.getC2();
+										eventReplacement = e1.getNode(true) == currentNode? e1.getC2() : e1.getC1();
 
-                                        tempInfo = "SVTYPE=" + newComplexEvent.getAlt().substring(1, 4) + ";CHR2=" + eventEnd.getChr() + ";END=" + eventEnd.getPos() + ";ADP=" + readDepth;
-                                        newComplexEvent.setInfo(tempInfo);
+										if(eventStart.compareTo(eventEnd) > 0 ){
+											eventStart = null;
+										}
 
-                                    } else if (e1.getC1().compareTo(e2.getC2()) == e2.getC1().compareTo(e1.getC2())){
+										type = EVENT_TYPE.VECTOR_PARTS;
+									}
 
-                                        GenomicCoordinate eventStart, eventEnd, eventReplacement;
+//                                    else if (e1.getC1().compareTo(e2.getC2()) == e2.getC1().compareTo(e1.getC2())){
+//
+//                                        GenomicCoordinate eventStart, eventEnd, eventReplacement;
+//
+//                                        eventStart = (e1.getC1().compareTo(e2.getC2()) < 0?e1.getC1():e1.getC2());
+//                                        eventEnd = (e1.getC1().compareTo(e2.getC2()) < 0?e2.getC2():e2.getC1());
+//                                        eventReplacement = (e1.getC1().compareTo(e2.getC2()) < 0?e2.getC1():e2.getC2());
+//
+//                                        newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_INVERTED_REPLACED_DELETION, (new Event[]{e1, e2}), true, currentNode, eventReplacement);
+//
+//                                        double readDepth = (checkRD ? getReadDepth(samReader, eventStart.getChr(), eventStart.getPos(), eventEnd.getPos()) : -1);
+//
+//                                        tempInfo = "SVTYPE=" + newComplexEvent.getAlt().substring(1, 4) + ";CHR2=" + eventEnd.getChr() + ";END=" + eventEnd.getPos() + ";ADP=" + readDepth;
+//                                        newComplexEvent.setInfo(tempInfo);
+//
+//                                    }
+                                } else if (e2.getType() == EVENT_TYPE.ITX2) {
 
-                                        eventStart = (e1.getC1().compareTo(e2.getC2()) < 0?e1.getC1():e1.getC2());
-                                        eventEnd = (e1.getC1().compareTo(e2.getC2()) < 0?e2.getC2():e2.getC1());
-                                        eventReplacement = (e1.getC1().compareTo(e2.getC2()) < 0?e2.getC1():e2.getC2());
+									eventStart = e2.getNode(true) == currentNode? e2.getC1() : null;
+									eventEnd = e1.getNode(true) == currentNode? e1.getC1() : e1.getC2();
+									eventReplacement = e1.getNode(true) == currentNode? e1.getC2() : e1.getC1();
+									type = EVENT_TYPE.VECTOR_PARTS;
 
-                                        newComplexEvent = new ComplexEvent(eventStart, eventEnd, EVENT_TYPE.COMPLEX_INVERTED_REPLACED_DELETION, (new Event[]{e1, e2}), true, currentNode, eventReplacement);
 
-                                        double readDepth = (checkRD ? getReadDepth(samReader, eventStart.getChr(), eventStart.getPos(), eventEnd.getPos()) : -1);
+								}
 
-                                        tempInfo = "SVTYPE=" + newComplexEvent.getAlt().substring(1, 4) + ";CHR2=" + eventEnd.getChr() + ";END=" + eventEnd.getPos() + ";ADP=" + readDepth;
-                                        newComplexEvent.setInfo(tempInfo);
+								break;
+							case BE1:
+								if (e2.getNode(true) == currentNode && e2.getC1().compareTo(e1.getC1()) < 0 &&
+										(e2.getType() == EVENT_TYPE.BE2 || e2.getType() == EVENT_TYPE.ITX2)) {
 
-                                    }
-                                }
-                                break;
-                            case BE1:
-                                if(e2.getType()==EVENT_TYPE.BE2 || e2.getType()==EVENT_TYPE.ITX2 || e2.getType()==EVENT_TYPE.INVTX2 ){
-                                    // Possible Vector Part
-                                }
-                                break;
+									//that' right, else it would be weird
+
+									eventStart = e2.getC1();
+									eventEnd = e1.getC1();
+
+									if (e2.getType() == EVENT_TYPE.ITX2) {
+										eventReplacement = e2.getC2();
+									}
+
+									type = EVENT_TYPE.VECTOR_PARTS;
+
+								} else if ( e2.getType()==EVENT_TYPE.INVTX2){
+									eventStart = e2.getNode(true) == currentNode?e2.getC1():e2.getC2();
+									eventEnd = e1.getC1();
+									eventReplacement = e2.getNode(true) == currentNode?e2.getC2():e2.getC1();
+
+									if(eventStart.compareTo(eventEnd) > 0){
+										eventStart = null;
+									}
+
+									type = EVENT_TYPE.VECTOR_PARTS;
+
+								} else if (e2.getNode(false) == currentNode && e2.getC2().compareTo(e1.getC1()) < 0 &&
+										(e2.getType() == EVENT_TYPE.ITX1)) {
+									//that' right, else it would be weird
+
+									eventStart = e2.getC2();
+									eventEnd = e1.getC1();
+									eventReplacement = e2.getC1();
+									type = EVENT_TYPE.VECTOR_PARTS;
+
+								}
+								break;
+
+							case BE2:
+								if(e2.getNode(true) == currentNode && e2.getC1().compareTo(e1.getC1()) > 0 &&
+										(e2.getType()==EVENT_TYPE.BE1 || e2.getType()==EVENT_TYPE.ITX1)){
+
+									//that' right, else it would be weird
+
+									eventStart = e1.getC1();
+									eventEnd = e2.getC1();
+
+									if(e2.getType()==EVENT_TYPE.ITX1 || e2.getType()==EVENT_TYPE.INVTX1){
+										eventReplacement = e2.getC2();
+									}
+
+									type = EVENT_TYPE.VECTOR_PARTS;
+
+
+								} else if ( e2.getType()==EVENT_TYPE.INVTX1){
+									eventStart = e1.getC1();
+									eventEnd = e2.getNode(true) == currentNode?e2.getC1():e2.getC2();
+									eventReplacement = e2.getNode(true) == currentNode?e2.getC2():e2.getC1();
+
+									if(eventStart.compareTo(eventEnd) > 0){
+										eventStart = null;
+									}
+
+									type = EVENT_TYPE.VECTOR_PARTS;
+
+								} else if (e2.getNode(false) == currentNode && e2.getC2().compareTo(e1.getC1()) > 0 &&
+										(e2.getType() == EVENT_TYPE.ITX2)) {
+									//that' right, else it would be weird
+
+									eventStart = e1.getC1();
+									eventEnd = e2.getC2();
+									eventReplacement = e2.getC1();
+									type = EVENT_TYPE.VECTOR_PARTS;
+
+								}
+								break;
 
                             default: //don't even attempt other types
+								break;
+
                         }
+
+						if (eventStart != null) {
+							newComplexEvent = new ComplexEvent(eventStart, eventEnd, type, (new Event[]{e1, e2}), true, currentNode, eventReplacement);
+
+							double readDepth = (checkRD ? getReadDepth(samReader, eventStart.getChr(), eventStart.getPos(), eventEnd.getPos()) : -1);
+
+							tempInfo = "SVTYPE=" + newComplexEvent.getAlt().substring(1, 4) + ";CHR2=" + eventEnd.getChr() + ";END=" + eventEnd.getPos() + ";ADP=" + readDepth;
+							newComplexEvent.setInfo(tempInfo);
+						}
 
                         //check if a new complex event has been generated
                         if(newComplexEvent != null){
@@ -1294,6 +1473,14 @@ public class Clove {
                             //System.out.println(newComplexEvent.toString());
                             newComplexEvents.add(newComplexEvent);
                             for(Event e: newComplexEvent.getEventsInvolvedInComplexEvent()){
+
+								// As this event is not an enclosed cycle we might need the ITX events once again
+								if(newComplexEvent.getType()==EVENT_TYPE.VECTOR_PARTS &&
+										(e.getType()== EVENT_TYPE.ITX1 || e.getType()== EVENT_TYPE.ITX2 ||
+												e.getType()== EVENT_TYPE.INVTX1 || e.getType()== EVENT_TYPE.INVTX2)){
+									continue;
+								}
+
                                 removeEvents.add(e);
                             }
                             newComplexEvent = null;
@@ -1304,12 +1491,14 @@ public class Clove {
                     }
                 }
 
+				for (Event e : newComplexEvents) {
+					e.getNode(true).getEvents().add(e);
+				}
+
                 for (Event e : removeEvents) {
                     e.getNode(true).getEvents().remove(e);
                     e.getNode(false).getEvents().remove(e);
 
-                    //TODO: Think about why events are not replaced by complex ones (probably because one event can only have two Coordinates and two nodes)
-                    //Maybe we should make number of coordinates and nodes arbitrary
                     if (e.getNode(true).getEvents().size() == 0) {
                         removeNodes.add(e.getNode(true));
                     }
@@ -1317,9 +1506,7 @@ public class Clove {
                         removeNodes.add(e.getNode(false));
                     }
                 }
-                for (Event e : newComplexEvents) {
-                    e.getNode(true).getEvents().add(e);
-                }
+
 
             }
 
@@ -1327,7 +1514,7 @@ public class Clove {
 
 
         //while we're at it: let's run through the nodes again!
-		//this time for output an combining ITXes or single breakends
+		//this time for output
 		int totalEvents = 0;
 		for (Entry<String, TreeSet<GenomicNode>> tableEntry : genomicNodes.entrySet()) {
 			//System.out.println("Working on Entry: "+tableEntry.toString());
@@ -1335,17 +1522,15 @@ public class Clove {
 
 				if (currentNode.getStart().getPos() == -1) {
 					//this is created by all the breakends that have no real second coordinate
-					//TODO: Prevent this behaviour in a more reasonable fashion
 					continue;
 				}
 
-//				if (currentNode.getEvents().size() > 1) {
-//					System.out.println("Node might be shifty: "+currentNode.getEvents().size()+" members!");
-//					System.out.println(currentNode.getEvents().get(0)+"  "+currentNode.getEvents().get(1));
-//				}
 				totalEvents += currentNode.getEvents().size();
 				HashSet<Event> skipEvents = new HashSet<Event>(), deleteEvents = new HashSet<Event>(), newEvents = new HashSet<Event>();
 				for (Event e : currentNode.getEvents()) {
+
+					//System.out.println("P4: " + e.toString());
+
 					if (skipEvents.contains(e))
 						continue;
 					//if(currentNode.getEvents().size() < 2 && e instanceof ComplexEvent ){//&& e.otherNode(currentNode) != currentNode){// (e.getType() == EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_DUPLICATION || e.getType()==EVENT_TYPE.COMPLEX_INTERCHROMOSOMAL_TRANSLOCATION)){
@@ -1412,7 +1597,25 @@ public class Clove {
 							}
 
 							break;
+						case COMPLEX_REPLACED_DELETION:
+						case COMPLEX_INVERTED_REPLACED_DELETION:
+							if(checkRD){
+								readDepth = getReadDepth(samReader, e.getC1().getChr(), e.getC1().getPos(), e.getC2().getPos());
+								if (readDepth < 0 || readDepth > mean - interval) {
+									e.addFilter("RD_FAIL");
+								}
+							}
 
+							break;
+						case COMPLEX_BIG_INSERTION:
+							if(checkRD){
+								readDepth = getReadDepth(samReader, e.getC1().getChr(), e.getC1().getPos()-30, e.getC2().getPos()+30);
+								if (readDepth > mean + interval || readDepth < mean - interval) {
+									e.addFilter("RD_FAIL");
+								}
+							}
+
+							break;
 						// handles all interchromosmal events
 						case ITX1:
 						case ITX2:
@@ -1421,6 +1624,15 @@ public class Clove {
 							e.addFilter("SINGLE_ITX");
 							e.setAlt(getAltVCF(e.getType()));
 //							skipEvents.add(e);
+							break;
+						case VECTOR_PARTS:
+							if(checkRD){
+								readDepth = getReadDepth(samReader, e.getC1().getChr(), e.getC1().getPos(), e.getC2().getPos());
+								if (readDepth < mean + interval) {
+									e.addFilter("RD_FAIL");
+								}
+							}
+
 							break;
 						default:
 							break;
